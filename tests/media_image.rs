@@ -85,7 +85,7 @@ fn req_001_decode() {
     );
     let image = decode(&gif).unwrap();
     assert_eq!((image.width, image.height), (2, 2));
-    assert_eq!(image.pixels, [255, 0, 0, 255].repeat(4));
+    assert_eq!(image.pixels, vec![255, 0, 0, 255].repeat(4));
 
     // Lossless and alpha WebP decode to canonical RGBA.
     for (encoded, width, height, pixels) in [
@@ -93,7 +93,7 @@ fn req_001_decode() {
             "UklGRhwAAABXRUJQVlA4TA8AAAAvAkAAAAcQ/Y/+ByKi/wEA",
             3,
             2,
-            [255, 0, 0, 255].repeat(6),
+            vec![255, 0, 0, 255].repeat(6),
         ),
         (
             "UklGRh4AAABXRUJQVlA4TBEAAAAvAUAAEA8Q8x/zH4wViOh/CAA=",
