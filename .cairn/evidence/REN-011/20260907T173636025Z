@@ -1,0 +1,21 @@
+requirement: REN-011
+requirement_digest: sha256:577a3bd5d426f4d317beacdb7c20a2d2ed4f7100d17cc58ee6a1ed617d7446be
+sequence: 2
+history_digest: sha256:ec37795531f8a5519b837590c9576ac039ff07a83dd19542ffdc07268686179d
+mechanism: render-core.md
+commit: f97c74a
+inputs_digest: sha256:2ae90c49f0f6fbde9656c7f958426cf326986718ab534eced84fe55a0412a66d
+mechanism_digest: sha256:2d84179b688aae9cbdc670c76a2f9dc6f5b5a453f19403bac6daf5d320e10f82
+inputs_detail: .cairn/evidence/REN-001/20260907T173635799Z-334561.inputs.json
+command: sh scripts/render-core.sh
+cwd: .
+exit: 0
+output_digest: sha256:63bc805244231f7dfc9658e8e26c2f51c7c524f1ddd3e246ded7ba13bc612769
+output: .cairn/evidence/REN-001/20260907T173635799Z-334561.out
+stderr_output: .cairn/evidence/REN-001/20260907T173635799Z-334561.err
+stderr_digest: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+signal: none
+execution_error: null
+result: pass
+source: line
+recorded: 2026-09-07T17:36:36.024Z
