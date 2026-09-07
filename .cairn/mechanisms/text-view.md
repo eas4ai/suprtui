@@ -5,6 +5,9 @@ inputs:
   - scripts/text-view.sh
   - src/lib.rs
   - src/text.rs
+  - src/uni/mod.rs
+  - src/uni/segments.rs
+  - tests/text_view.rs
   - Cargo.toml
   - Cargo.lock
 requirements:

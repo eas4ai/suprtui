@@ -36,6 +36,7 @@ struct Snapshot {
 pub enum TextError {
     OutOfRange,
     NotCharBoundary,
+    LineOutOfRange,
 }
 
 /// Editable text with spans, history, and view dirt tracking.
@@ -308,6 +309,784 @@ impl Default for TextBuffer {
     fn default() -> Self {
         TextBuffer::new()
     }
+}
+
+// ---- view domain (text-view commitment) ----
+
+use crate::uni::WidthMethod;
+use crate::uni::segments::{
+    grapheme_breaks, is_word_codepoint, line_breaks, wrap_pos_grapheme_safe,
+};
+
+/// Line wrap mode. Only `uni` decides break positions; the view caches
+/// the resulting virtual lines.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum WrapMode {
+    /// One virtual line per logical line, however wide.
+    #[default]
+    None,
+    /// Break after the last whitespace fitting the width; overlong
+    /// words break at the width.
+    Word,
+    /// Break at the width on cluster boundaries.
+    Char,
+}
+
+/// One laid-out row: byte range into the buffer without the line
+/// terminator, plus its logical line index.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct VirtualLine {
+    pub line: usize,
+    pub start: usize,
+    pub end: usize,
+}
+
+/// Highlight overlay owned by the view: spans grouped under one
+/// reference id for exact removal.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Highlight {
+    pub id: u32,
+    pub spans: Vec<Span>,
+}
+
+/// Attached syntax style: a substring pattern whose occurrences take
+/// the style id.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SyntaxStyle {
+    pub name: String,
+    pub pattern: String,
+    pub style: u32,
+}
+
+fn logical_lines(text: &str) -> Vec<(usize, usize)> {
+    let mut lines = Vec::new();
+    let mut start = 0;
+    for br in line_breaks(text) {
+        let (end, next) = match br.kind {
+            crate::uni::segments::LineBreakKind::Crlf => (br.pos - 1, br.pos + 1),
+            _ => (br.pos, br.pos + 1),
+        };
+        lines.push((start, end));
+        start = next;
+    }
+    lines.push((start, text.len()));
+    lines
+}
+
+/// Editing view over an owned buffer: wrapping, selection, a
+/// cluster-safe cursor, highlight overlays, and syntax styles.
+pub struct TextView {
+    buffer: TextBuffer,
+    width: u32,
+    wrap: WrapMode,
+    cursor: usize,
+    selection: Option<(usize, usize)>,
+    highlights: Vec<Highlight>,
+    syntax_styles: Vec<SyntaxStyle>,
+    cached_lines: Vec<VirtualLine>,
+    cache_epoch: u64,
+    cache_width: u32,
+    cache_wrap: WrapMode,
+}
+
+impl TextView {
+    pub fn new(buffer: TextBuffer) -> Self {
+        TextView {
+            buffer,
+            width: 80,
+            wrap: WrapMode::None,
+            cursor: 0,
+            selection: None,
+            highlights: Vec::new(),
+            syntax_styles: Vec::new(),
+            cached_lines: Vec::new(),
+            cache_epoch: u64::MAX,
+            cache_width: 0,
+            cache_wrap: WrapMode::Char,
+        }
+    }
+
+    pub fn buffer(&self) -> &TextBuffer {
+        &self.buffer
+    }
+
+    pub fn buffer_mut(&mut self) -> &mut TextBuffer {
+        &mut self.buffer
+    }
+
+    pub fn set_width(&mut self, width: u32) {
+        self.width = width;
+    }
+
+    pub fn set_wrap_mode(&mut self, wrap: WrapMode) {
+        self.wrap = wrap;
+    }
+
+    fn wrap_width(&self) -> u32 {
+        self.width.max(1)
+    }
+
+    fn refresh_cache(&mut self) {
+        if self.buffer.epoch() == self.cache_epoch
+            && self.width == self.cache_width
+            && self.wrap == self.cache_wrap
+        {
+            return;
+        }
+        let mut lines = Vec::new();
+        let text = self.buffer.content();
+        for (index, (start, end)) in logical_lines(text).iter().enumerate() {
+            let line = &text[*start..*end];
+            if self.wrap == WrapMode::None || line.is_empty() {
+                lines.push(VirtualLine {
+                    line: index,
+                    start: *start,
+                    end: *end,
+                });
+                continue;
+            }
+            let width = self.wrap_width();
+            let starts: Vec<usize> = grapheme_breaks(line, WidthMethod::Unicode)
+                .iter()
+                .map(|(s, _)| *s)
+                .collect();
+            let snap = |cut: usize| -> usize {
+                let mut at = 0;
+                for s in starts.iter() {
+                    if *s <= cut {
+                        at = *s;
+                    } else {
+                        break;
+                    }
+                }
+                at
+            };
+            let mut pos = 0;
+            while pos < line.len() {
+                let rest = &line[pos..];
+                let span = wrap_pos_grapheme_safe(rest, width, 8, false, WidthMethod::Unicode);
+                let mut cut = span.byte_offset as usize;
+                if cut >= rest.len() {
+                    lines.push(VirtualLine {
+                        line: index,
+                        start: *start + pos,
+                        end: *end,
+                    });
+                    break;
+                }
+                if self.wrap == WrapMode::Word {
+                    let prefix = &rest[..cut];
+                    if let Some((k, ch)) = prefix
+                        .char_indices()
+                        .rev()
+                        .find(|(_, ch)| ch.is_whitespace())
+                    {
+                        let after = k + ch.len_utf8();
+                        if after < rest.len() {
+                            cut = after;
+                        }
+                    }
+                }
+                cut = snap(pos + cut);
+                if cut <= pos {
+                    // No forward break: consume one cluster so the loop
+                    // always progresses.
+                    cut = starts
+                        .iter()
+                        .copied()
+                        .find(|s| *s > pos)
+                        .unwrap_or(line.len());
+                }
+                lines.push(VirtualLine {
+                    line: index,
+                    start: *start + pos,
+                    end: *start + cut,
+                });
+                pos = cut;
+            }
+        }
+        self.cache_epoch = self.buffer.epoch();
+        self.cache_width = self.width;
+        self.cache_wrap = self.wrap;
+        self.cached_lines = lines;
+    }
+
+    /// Laid-out rows, rebuilt when content, width, or wrap mode moves.
+    pub fn virtual_lines(&mut self) -> &[VirtualLine] {
+        self.refresh_cache();
+        &self.cached_lines
+    }
+
+    pub fn virtual_line_count(&mut self) -> usize {
+        self.refresh_cache();
+        self.cached_lines.len()
+    }
+
+    fn check_offset(&self, offset: usize) -> Result<(), TextError> {
+        if offset > self.buffer.len() {
+            return Err(TextError::OutOfRange);
+        }
+        if !self.buffer.content().is_char_boundary(offset) {
+            return Err(TextError::NotCharBoundary);
+        }
+        Ok(())
+    }
+
+    fn check_line(&self, line: usize) -> Result<(usize, usize), TextError> {
+        logical_lines(self.buffer.content())
+            .get(line)
+            .copied()
+            .ok_or(TextError::LineOutOfRange)
+    }
+
+    /// Number of logical lines; a trailing break opens a final empty
+    /// line.
+    pub fn line_count(&self) -> usize {
+        logical_lines(self.buffer.content()).len()
+    }
+
+    /// Byte range of one logical line without its terminator.
+    pub fn line_range(&self, line: usize) -> Result<(usize, usize), TextError> {
+        self.check_line(line)
+    }
+
+    /// Logical line and byte column holding an offset.
+    pub fn offset_to_line_col(&self, offset: usize) -> Result<(usize, usize), TextError> {
+        self.check_offset(offset)?;
+        let mut line = 0;
+        for (start, end) in logical_lines(self.buffer.content()) {
+            if offset <= end {
+                return Ok((line, offset - start));
+            }
+            line += 1;
+        }
+        Ok((line.saturating_sub(1), 0))
+    }
+
+    // ---- selection (TXT-006) ----
+
+    /// Anchor and focus as an ordered byte range, if any.
+    pub fn selection(&self) -> Option<(usize, usize)> {
+        self.selection.map(|(a, f)| (a.min(f), a.max(f)))
+    }
+
+    pub fn set_selection(&mut self, anchor: usize, focus: usize) -> Result<(), TextError> {
+        self.check_offset(anchor)?;
+        self.check_offset(focus)?;
+        self.selection = Some((anchor, focus));
+        Ok(())
+    }
+
+    pub fn clear_selection(&mut self) {
+        self.selection = None;
+    }
+
+    /// Exactly the selected bytes, or `None` without a selection.
+    /// Endpoints clamp to the content after direct buffer edits.
+    pub fn selected_text(&self) -> Option<&str> {
+        let (a, f) = self.selection?;
+        let len = self.buffer.len();
+        let (start, end) = (a.min(f).min(len), a.max(f).min(len));
+        self.buffer.content().get(start..end)
+    }
+
+    /// Cover the whole word around an offset; words are runs of word
+    /// codepoints under `uni` classification.
+    pub fn select_word_at(&mut self, offset: usize) -> Result<(), TextError> {
+        self.check_offset(offset)?;
+        let text = self.buffer.content();
+        let mut start = offset;
+        while start > 0 {
+            let prev = text[..start].chars().next_back();
+            match prev {
+                Some(ch) if is_word_codepoint(ch as u32) => start -= ch.len_utf8(),
+                _ => break,
+            }
+        }
+        let mut end = offset;
+        while end < text.len() {
+            let next = text[end..].chars().next();
+            match next {
+                Some(ch) if is_word_codepoint(ch as u32) => end += ch.len_utf8(),
+                _ => break,
+            }
+        }
+        self.selection = Some((start, end));
+        Ok(())
+    }
+
+    /// Cover the whole logical line around an offset, terminator
+    /// excluded.
+    pub fn select_line_at(&mut self, offset: usize) -> Result<(), TextError> {
+        self.check_offset(offset)?;
+        let (line, _) = self.offset_to_line_col(offset)?;
+        let (start, end) = self.check_line(line)?;
+        self.selection = Some((start, end));
+        Ok(())
+    }
+
+    // ---- cluster-safe cursor (TXT-007) ----
+
+    /// Cursor offset, clamped to the content after direct buffer edits.
+    pub fn cursor(&self) -> usize {
+        self.cursor.min(self.buffer.len())
+    }
+
+    pub fn set_cursor(&mut self, offset: usize) -> Result<(), TextError> {
+        self.check_offset(offset)?;
+        self.cursor = offset;
+        Ok(())
+    }
+
+    fn cluster_starts(&self, line_start: usize, line_end: usize) -> Vec<usize> {
+        let text = self.buffer.content();
+        grapheme_breaks(&text[line_start..line_end], WidthMethod::Unicode)
+            .iter()
+            .map(|(s, _)| line_start + s)
+            .collect()
+    }
+
+    fn snap_to_cluster(&self, offset: usize) -> usize {
+        let text = self.buffer.content();
+        let (line, _) = self.offset_to_line_col(offset).unwrap_or((0, 0));
+        let Ok((start, end)) = self.check_line(line) else {
+            return text.len();
+        };
+        let mut at = start;
+        for s in self.cluster_starts(start, end) {
+            if s <= offset {
+                at = s;
+            } else {
+                break;
+            }
+        }
+        at
+    }
+
+    /// Step to the previous cluster start, crossing to the previous
+    /// line end at a line start; stays at zero.
+    pub fn move_left(&mut self) -> usize {
+        let cursor = self.cursor();
+        if cursor == 0 {
+            return 0;
+        }
+        let (line, _) = self.offset_to_line_col(cursor).unwrap_or((0, 0));
+        let (start, _) = self.check_line(line).unwrap_or((0, 0));
+        if cursor == start && line > 0 {
+            let (_, prev_end) = self.check_line(line - 1).unwrap_or((0, 0));
+            self.cursor = prev_end;
+            return prev_end;
+        }
+        let mut at = start;
+        for s in self.cluster_starts(start, cursor) {
+            if s < cursor {
+                at = s;
+            }
+        }
+        self.cursor = at;
+        at
+    }
+
+    /// Step to the next cluster start, crossing to the next line start
+    /// at a line end; stays at the content end.
+    pub fn move_right(&mut self) -> usize {
+        let cursor = self.cursor();
+        let text = self.buffer.content();
+        if cursor >= text.len() {
+            return text.len();
+        }
+        let (line, _) = self.offset_to_line_col(cursor).unwrap_or((0, 0));
+        let (_, end) = self.check_line(line).unwrap_or((0, text.len()));
+        if cursor == end {
+            let (next_start, _) = self
+                .check_line(line + 1)
+                .unwrap_or((text.len(), text.len()));
+            self.cursor = next_start.min(text.len());
+            return self.cursor;
+        }
+        let mut at = end.min(text.len());
+        for s in self.cluster_starts(cursor, end) {
+            if s > cursor {
+                at = s;
+                break;
+            }
+        }
+        self.cursor = at.min(text.len());
+        self.cursor
+    }
+
+    /// Move to the same character column in the neighboring logical
+    /// line, clamped and snapped to a cluster start.
+    pub fn move_up(&mut self) -> usize {
+        self.move_vertical(-1)
+    }
+
+    pub fn move_down(&mut self) -> usize {
+        self.move_vertical(1)
+    }
+
+    fn move_vertical(&mut self, delta: i32) -> usize {
+        let cursor = self.cursor();
+        let text = self.buffer.content();
+        let (line, _) = self.offset_to_line_col(cursor).unwrap_or((0, 0));
+        let (origin_start, _) = self.check_line(line).unwrap_or((0, 0));
+        let col_chars = text[origin_start..cursor.min(text.len())].chars().count();
+        let target = line as i32 + delta;
+        if target < 0 {
+            self.cursor = 0;
+            return 0;
+        }
+        let Ok((start, end)) = self.check_line(target as usize) else {
+            self.cursor = text.len();
+            return text.len();
+        };
+        let line_text = &text[start..end];
+        let mut at = end;
+        for (i, (k, _)) in line_text.char_indices().enumerate() {
+            if i >= col_chars {
+                at = start + k;
+                break;
+            }
+        }
+        self.cursor = self.snap_to_cluster(at.min(end));
+        self.cursor
+    }
+
+    pub fn move_home(&mut self) -> usize {
+        let cursor = self.cursor();
+        let (line, _) = self.offset_to_line_col(cursor).unwrap_or((0, 0));
+        let (start, _) = self.check_line(line).unwrap_or((0, 0));
+        self.cursor = start;
+        start
+    }
+
+    pub fn move_end(&mut self) -> usize {
+        let cursor = self.cursor();
+        let (line, _) = self.offset_to_line_col(cursor).unwrap_or((0, 0));
+        let (_, end) = self.check_line(line).unwrap_or((0, self.buffer.len()));
+        self.cursor = end;
+        end
+    }
+
+    /// Insert text at the cursor and advance past it.
+    pub fn insert_text(&mut self, text: &str) -> Result<(), TextError> {
+        let cursor = self.cursor();
+        self.buffer.insert(cursor, text)?;
+        self.cursor = cursor + text.len();
+        self.clear_selection();
+        Ok(())
+    }
+
+    /// Delete the cluster before the cursor, joining lines at a line
+    /// start. Never strands half a cluster.
+    pub fn backspace(&mut self) -> Result<(), TextError> {
+        let cursor = self.cursor();
+        if cursor == 0 {
+            return Ok(());
+        }
+        let (line, _) = self.offset_to_line_col(cursor).unwrap_or((0, 0));
+        let (start, _) = self.check_line(line).unwrap_or((0, 0));
+        if cursor == start && line > 0 {
+            let (_, prev_end) = self.check_line(line - 1)?;
+            self.buffer.delete(prev_end, cursor - prev_end)?;
+            self.cursor = prev_end;
+        } else {
+            let prev = self.move_left();
+            self.buffer.delete(prev, cursor - prev)?;
+            self.cursor = prev;
+        }
+        self.clear_selection();
+        Ok(())
+    }
+
+    /// Delete the cluster at the cursor, joining lines at a line end.
+    pub fn delete_at_cursor(&mut self) -> Result<(), TextError> {
+        let cursor = self.cursor();
+        let text = self.buffer.content();
+        if cursor >= text.len() {
+            return Ok(());
+        }
+        let (line, _) = self.offset_to_line_col(cursor).unwrap_or((0, 0));
+        let (_, end) = self.check_line(line).unwrap_or((0, text.len()));
+        if cursor == end {
+            let (next_start, _) = self.check_line(line + 1)?;
+            self.buffer.delete(cursor, next_start - cursor)?;
+        } else {
+            let next = self.move_right();
+            self.buffer.delete(cursor, next - cursor)?;
+            self.cursor = cursor;
+        }
+        self.clear_selection();
+        Ok(())
+    }
+
+    // ---- highlights by reference (TXT-008) ----
+
+    /// Stage an overlay span under a highlight id. Overlays render on
+    /// top of buffer spans; removing by id drops exactly its spans.
+    pub fn add_highlight(
+        &mut self,
+        id: u32,
+        start: usize,
+        end: usize,
+        style: u32,
+    ) -> Result<(), TextError> {
+        self.check_offset(start)?;
+        self.check_offset(end)?;
+        if start > end {
+            return Err(TextError::OutOfRange);
+        }
+        match self.highlights.iter_mut().find(|h| h.id == id) {
+            Some(entry) => entry.spans.push(Span { start, end, style }),
+            None => self.highlights.push(Highlight {
+                id,
+                spans: vec![Span { start, end, style }],
+            }),
+        }
+        Ok(())
+    }
+
+    pub fn highlights(&self) -> &[Highlight] {
+        &self.highlights
+    }
+
+    /// Drop exactly one reference's spans; foreign spans are untouched.
+    /// Returns false when the id was never added.
+    pub fn remove_highlight(&mut self, id: u32) -> bool {
+        match self.highlights.iter().position(|h| h.id == id) {
+            Some(index) => {
+                self.highlights.remove(index);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Buffer spans with highlight overlays appended, the render input.
+    pub fn resolved_spans(&self) -> Vec<Span> {
+        let mut out = self.buffer.spans().to_vec();
+        for highlight in self.highlights.iter() {
+            out.extend(highlight.spans.iter().copied());
+        }
+        out
+    }
+
+    // ---- syntax styles (TXT-009) ----
+
+    /// Attach a style to every non-overlapping occurrence of a
+    /// substring pattern, returning the span count. An empty pattern
+    /// matches nothing.
+    pub fn attach_syntax_style(
+        &mut self,
+        name: &str,
+        pattern: &str,
+        style: u32,
+    ) -> Result<usize, TextError> {
+        if pattern.is_empty() {
+            return Ok(0);
+        }
+        let mut count = 0;
+        let mut search = 0;
+        let text = self.buffer.content();
+        let mut hits = Vec::new();
+        while let Some(found) = text[search..].find(pattern) {
+            let start = search + found;
+            hits.push((start, start + pattern.len()));
+            search = start + pattern.len();
+            count += 1;
+        }
+        for (start, end) in hits {
+            self.buffer.add_span(start, end, style)?;
+        }
+        self.syntax_styles.push(SyntaxStyle {
+            name: name.to_string(),
+            pattern: pattern.to_string(),
+            style,
+        });
+        Ok(count)
+    }
+
+    pub fn syntax_styles(&self) -> &[SyntaxStyle] {
+        &self.syntax_styles
+    }
+}
+
+#[cfg(test)]
+fn test_view(text: &str) -> TextView {
+    TextView::new(TextBuffer::from_text(text))
+}
+
+/// TXT-005 falsifier: a virtual line exceeds the set width, or a wrap
+/// splits a grapheme cluster.
+#[cfg(test)]
+#[test]
+fn wrapping() {
+    let mut view = test_view("aa bb cc dd ee");
+    view.set_wrap_mode(WrapMode::Word);
+    view.set_width(6);
+    let rows = view.virtual_lines().to_vec();
+    let lines: Vec<String> = rows
+        .iter()
+        .map(|v| view.buffer().content()[v.start..v.end].to_string())
+        .collect();
+    assert_eq!(vec!["aa bb ", "cc dd ", "ee"], lines);
+    // No virtual line exceeds the width.
+    let widths: Vec<usize> = rows
+        .iter()
+        .map(|v| view.buffer().content()[v.start..v.end].chars().count())
+        .collect();
+    assert!(widths.iter().all(|w| *w <= 6));
+
+    // Char wrap never splits a cluster: e + acute stays whole.
+    let mut wide = test_view("ae\u{301}b ce\u{301}d");
+    wide.set_wrap_mode(WrapMode::Char);
+    wide.set_width(2);
+    let wrows = wide.virtual_lines().to_vec();
+    let rows: Vec<String> = wrows
+        .iter()
+        .map(|v| wide.buffer().content()[v.start..v.end].to_string())
+        .collect();
+    assert!(rows.iter().all(|r| r.chars().count() <= 3));
+    assert_eq!("ae\u{301}", rows[0]);
+    assert_eq!(4, rows.len());
+    assert_eq!(4, wide.virtual_line_count());
+
+    // NoWrap keeps logical lines however wide.
+    let mut plain = test_view("aa bb cc dd ee");
+    plain.set_width(6);
+    assert_eq!(1, plain.virtual_line_count());
+}
+
+/// TXT-006 falsifier: a word selection stops mid-word, or extracted
+/// text differs from the selected range.
+#[cfg(test)]
+#[test]
+fn selection() {
+    let mut view = test_view("hello brave world");
+    view.select_word_at(8).unwrap();
+    assert_eq!(Some((6, 11)), view.selection());
+    assert_eq!(Some("brave"), view.selected_text());
+    view.select_line_at(0).unwrap();
+    assert_eq!(Some((0, 17)), view.selection());
+    assert_eq!(Some("hello brave world"), view.selected_text());
+    view.set_selection(11, 6).unwrap();
+    assert_eq!(Some((6, 11)), view.selection());
+    assert_eq!(Some("brave"), view.selected_text());
+    view.clear_selection();
+    assert_eq!(None, view.selection());
+    assert_eq!(None, view.selected_text());
+}
+
+/// TXT-007 falsifier: a backspace on a combining sequence removes only
+/// the mark or only the base.
+#[cfg(test)]
+#[test]
+fn cursor_cluster_safety() {
+    // e + combining acute is one cluster over two chars.
+    let mut view = test_view("ae\u{301}b");
+    view.set_cursor(4).unwrap();
+    view.backspace().unwrap();
+    assert_eq!("ab", view.buffer().content());
+    assert_eq!(1, view.cursor());
+    // Delete takes the whole cluster forward too.
+    let mut forward = test_view("ae\u{301}b");
+    forward.set_cursor(1).unwrap();
+    forward.delete_at_cursor().unwrap();
+    assert_eq!("ab", forward.buffer().content());
+    // Arrows step over the cluster, never into it.
+    let mut walk = test_view("ae\u{301}b");
+    assert_eq!(0, walk.cursor());
+    assert_eq!(1, walk.move_right());
+    assert_eq!(4, walk.move_right());
+    assert_eq!(5, walk.move_right());
+    assert_eq!(5, walk.move_right());
+    assert_eq!(4, walk.move_left());
+    // Insert then backspace round-trips a cluster.
+    walk.set_cursor(0).unwrap();
+    walk.insert_text("e\u{301}").unwrap();
+    assert_eq!(3, walk.cursor());
+    walk.backspace().unwrap();
+    assert_eq!("ae\u{301}b", walk.buffer().content());
+}
+
+/// TXT-008 falsifier: a foreign span disappears, or a removed span
+/// still renders.
+#[cfg(test)]
+#[test]
+fn highlight_refs() {
+    let mut view = test_view("hello world");
+    view.add_highlight(1, 0, 5, 10).unwrap();
+    view.add_highlight(2, 6, 11, 20).unwrap();
+    view.add_highlight(1, 0, 2, 10).unwrap();
+    assert!(view.remove_highlight(1));
+    assert!(!view.remove_highlight(1));
+    assert!(!view.remove_highlight(99));
+    assert_eq!(1, view.highlights().len());
+    assert_eq!(2, view.highlights()[0].id);
+    // The foreign span renders on; the removed ones do not.
+    let rendered: Vec<Span> = view.resolved_spans();
+    assert!(rendered.contains(&Span {
+        start: 6,
+        end: 11,
+        style: 20
+    }));
+    assert!(!rendered.iter().any(|s| s.style == 10));
+}
+
+/// TXT-009 falsifier: no span changes after attaching a style to text
+/// it covers.
+#[cfg(test)]
+#[test]
+fn syntax_style() {
+    let mut view = test_view("fn main() { fn helper() {} }");
+    let count = view.attach_syntax_style("keyword", "fn", 3).unwrap();
+    assert_eq!(2, count);
+    let styled: Vec<Span> = view
+        .buffer()
+        .spans()
+        .iter()
+        .copied()
+        .filter(|s| s.style == 3)
+        .collect();
+    assert_eq!(
+        vec![
+            Span {
+                start: 0,
+                end: 2,
+                style: 3
+            },
+            Span {
+                start: 12,
+                end: 14,
+                style: 3
+            }
+        ],
+        styled
+    );
+    assert_eq!(0, view.attach_syntax_style("empty", "", 4).unwrap());
+}
+
+/// TXT-010 falsifier: any offset beyond the content end panics or
+/// corrupts content.
+#[cfg(test)]
+#[test]
+fn offset_bounds() {
+    let mut view = test_view("ab\né́d");
+    assert_eq!(Err(TextError::OutOfRange), view.set_cursor(99));
+    assert_eq!(Err(TextError::OutOfRange), view.set_selection(0, 99));
+    assert_eq!(Err(TextError::OutOfRange), view.select_word_at(99));
+    assert_eq!(Err(TextError::OutOfRange), view.select_line_at(99));
+    assert_eq!(Err(TextError::OutOfRange), view.add_highlight(1, 0, 99, 1));
+    assert_eq!(Err(TextError::NotCharBoundary), view.set_cursor(4));
+    assert_eq!(Err(TextError::LineOutOfRange), view.line_range(7));
+    assert_eq!(2, view.line_count());
+    assert_eq!(Ok((1, 0)), view.offset_to_line_col(3));
+    // Content survives every rejected call above.
+    assert_eq!("ab\né́d", view.buffer().content());
+    // Direct buffer edits cannot strand the cursor past the end.
+    view.set_cursor(5).unwrap();
+    view.buffer_mut().delete(0, 5).unwrap();
+    assert!(view.cursor() <= view.buffer().len());
 }
 
 /// TXT-001 falsifier: plain-text extraction differs from the reference
