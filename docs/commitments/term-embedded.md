@@ -47,5 +47,7 @@ clippy is clean.
 
 ## Mechanism demonstration (SPEC-022)
 
-To be demonstrated with controlled faults, one per requirement, each
-a source edit reverted in the same session, not a setup error.
+Demonstrated 2026-09-07 with controlled faults, each a source edit
+reverted in the same session, not a setup error: a green palette
+entry fails exactly TRM-006, and a DSR `0n` → `1n` response fails
+exactly TRM-007.

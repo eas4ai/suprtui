@@ -1,0 +1,21 @@
+requirement: TRM-006
+requirement_digest: sha256:648a28c26cdfb5164965e7c31a85df505c18811da4685c187eb5a6d1ac462b28
+sequence: 4
+history_digest: sha256:967f406b9925c6214df84c5e26746bb0a55ad99c4d4fad8fede785c08f1e874c
+mechanism: term-embedded.md
+commit: da4c597
+inputs_digest: sha256:fa1278253b696de347b7fa03e335bbf85617494e776fd2234f72f29ea646aadb
+mechanism_digest: sha256:ef90f2e4cf8af2a155c59a9d931a754132d4db6908f7bf6e0741417df540379d
+inputs_detail: .cairn/evidence/TRM-006/20260907T181858219Z-1001660.inputs.json
+command: sh scripts/term-embedded.sh
+cwd: .
+exit: 0
+output_digest: sha256:c9e57fdc48acb4592906ed68872bd905368b953e886aa56afa07d9d77bc4dff9
+output: .cairn/evidence/TRM-006/20260907T181858219Z-1001660.out
+stderr_output: .cairn/evidence/TRM-006/20260907T181858219Z-1001660.err
+stderr_digest: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+signal: none
+execution_error: null
+result: pass
+source: line
+recorded: 2026-09-07T18:18:58.384Z
