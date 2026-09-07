@@ -47,5 +47,9 @@ clippy is clean.
 
 ## Mechanism demonstration (SPEC-022)
 
-To be demonstrated with controlled faults, each a source edit
-reverted in the same session, not a setup error.
+Demonstrated 2026-09-07 with controlled faults, each a source edit
+reverted in the same session, not a setup error: expanding padding
+clicks into the line fails `req_011_padding_click_is_zero_width`,
+honoring the horizontal offset while wrapping fails
+`req_012_wrapping_ignores_horizontal_offset`, and a never-
+invalidated wrap cache fails `req_014_edits_invalidate_no_stale_rows`.

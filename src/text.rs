@@ -311,12 +311,89 @@ impl Default for TextBuffer {
     }
 }
 
+// ---- iterators (TXT-013) ----
+
+/// One grapheme cluster with its byte range. Clusters never split:
+/// combining sequences and zero-width joiners travel together.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Cluster<'a> {
+    pub text: &'a str,
+    pub start: usize,
+    pub end: usize,
+}
+
+impl TextBuffer {
+    /// Logical line ranges without terminators, in order.
+    pub fn line_ranges(&self) -> Vec<(usize, usize)> {
+        logical_lines(self.content())
+    }
+
+    /// Grapheme clusters over `[start, end)`. Offsets must be char
+    /// boundaries; every yielded cluster is non-empty so iteration
+    /// always terminates, even over zero-width prefixes.
+    pub fn clusters(&self, start: usize, end: usize) -> Result<Vec<Cluster<'_>>, TextError> {
+        self.check_offset(start)?;
+        self.check_offset(end)?;
+        if start > end {
+            return Err(TextError::OutOfRange);
+        }
+        let text = self.content();
+        let mut out = Vec::new();
+        let mut pos = start;
+        for (s, e) in grapheme_breaks(&text[start..end], WidthMethod::Unicode) {
+            let (cs, ce) = (start + s, start + e);
+            if ce <= pos {
+                // Defensive: never emit an empty or backward step,
+                // so a surprising break table cannot hang the caller.
+                continue;
+            }
+            out.push(Cluster {
+                text: &text[cs.max(pos)..ce],
+                start: cs.max(pos),
+                end: ce,
+            });
+            pos = ce;
+        }
+        if pos < end {
+            // The break table covered nothing past `pos` (for
+            // example a lone zero-width prefix the table skipped):
+            // yield the remainder whole rather than dropping text.
+            out.push(Cluster {
+                text: &text[pos..end],
+                start: pos,
+                end,
+            });
+        }
+        Ok(out)
+    }
+
+    /// Logical `(row, byte col)` holding an offset.
+    pub fn offset_to_coords(&self, offset: usize) -> Result<(usize, usize), TextError> {
+        self.check_offset(offset)?;
+        for (row, (start, end)) in self.line_ranges().iter().enumerate() {
+            if offset <= *end {
+                return Ok((row, offset - start));
+            }
+        }
+        let last = self.line_ranges().len().saturating_sub(1);
+        Ok((last, 0))
+    }
+
+    /// Offset of a `(row, byte col)` pair; columns past the line end
+    /// clamp to it.
+    pub fn coords_to_offset(&self, row: usize, col: usize) -> Result<usize, TextError> {
+        let ranges = self.line_ranges();
+        let (start, end) = ranges.get(row).copied().ok_or(TextError::LineOutOfRange)?;
+        Ok((start + col).min(end))
+    }
+}
+
 // ---- view domain (text-view commitment) ----
 
-use crate::uni::WidthMethod;
 use crate::uni::segments::{
     grapheme_breaks, is_word_codepoint, line_breaks, wrap_pos_grapheme_safe,
 };
+use crate::uni::{WidthMethod, width_at};
 
 /// Line wrap mode. Only `uni` decides break positions; the view caches
 /// the resulting virtual lines.
@@ -387,6 +464,9 @@ pub struct TextView {
     cache_epoch: u64,
     cache_width: u32,
     cache_wrap: WrapMode,
+    recomputes: u64,
+    occupancy: SelectionOccupancy,
+    gesture: Option<GestureState>,
 }
 
 impl TextView {
@@ -403,6 +483,9 @@ impl TextView {
             cache_epoch: u64::MAX,
             cache_width: 0,
             cache_wrap: WrapMode::Char,
+            recomputes: 0,
+            occupancy: SelectionOccupancy::Boundary,
+            gesture: None,
         }
     }
 
@@ -426,6 +509,13 @@ impl TextView {
         self.width.max(1)
     }
 
+    /// Layouts recomputed since construction (TXT-014): repeated
+    /// queries share one layout, so the count moves only when
+    /// content, width, or wrap mode moves.
+    pub fn recompute_count(&self) -> u64 {
+        self.recomputes
+    }
+
     fn refresh_cache(&mut self) {
         if self.buffer.epoch() == self.cache_epoch
             && self.width == self.cache_width
@@ -433,6 +523,7 @@ impl TextView {
         {
             return;
         }
+        self.recomputes += 1;
         let mut lines = Vec::new();
         let text = self.buffer.content();
         for (index, (start, end)) in logical_lines(text).iter().enumerate() {
@@ -622,6 +713,228 @@ impl TextView {
         let (line, _) = self.offset_to_line_col(offset)?;
         let (start, end) = self.check_line(line)?;
         self.selection = Some((start, end));
+        Ok(())
+    }
+
+    // ---- gesture and viewport selection (TXT-011, TXT-012) ----
+
+    /// How a pressed cell expands. `Cell` keeps raw offsets, `Word`
+    /// and `Line` expand each endpoint through the word unit or the
+    /// logical line, as in the reference selection behaviors.
+    pub fn set_gesture_occupancy(&mut self, occupancy: SelectionOccupancy) {
+        self.occupancy = occupancy;
+    }
+
+    pub fn gesture_occupancy(&self) -> SelectionOccupancy {
+        self.occupancy
+    }
+
+    /// Display-column cell to content offset on a virtual line.
+    /// Columns past the line end land on the line end (padding
+    /// clicks); a virtual line past the layout is `None`.
+    pub fn cell_to_offset(&mut self, vline: usize, col: u32) -> Option<usize> {
+        self.refresh_cache();
+        let line = self.cached_lines.get(vline).copied()?;
+        let text = self.buffer.content();
+        let mut acc = 0u32;
+        for s in self.cluster_starts(line.start, line.end) {
+            let w = width_at(text, s, 8, WidthMethod::Unicode).max(1);
+            if col < acc + w {
+                return Some(s);
+            }
+            acc += w;
+        }
+        Some(line.end)
+    }
+
+    /// Word unit around an offset: maximal runs of one class, where
+    /// the reference boundary set (spaces, tabs, quotes, brackets,
+    /// and other separators) groups instead of splitting, so space
+    /// runs are selectable. `/` is not a boundary, unlike in
+    /// wrapping; CJK and ASCII group together.
+    fn word_unit_at(&self, offset: usize, line_start: usize, line_end: usize) -> (usize, usize) {
+        let text = self.buffer.content();
+        let at = offset.clamp(line_start, line_end);
+        let class = |o: usize| {
+            text[o..]
+                .chars()
+                .next()
+                .map(is_selection_separator)
+                .unwrap_or(true)
+        };
+        let anchor_class = class(at.min(line_end.saturating_sub(1).max(line_start)));
+        let mut start = at;
+        while start > line_start {
+            let prev_len = text[..start]
+                .chars()
+                .next_back()
+                .map(|c| c.len_utf8())
+                .unwrap_or(0);
+            if prev_len == 0 || class(start - prev_len) != anchor_class {
+                break;
+            }
+            start -= prev_len;
+        }
+        let mut end = at;
+        while end < line_end {
+            if class(end) != anchor_class {
+                break;
+            }
+            end += text[end..]
+                .chars()
+                .next()
+                .map(|c| c.len_utf8())
+                .unwrap_or(0);
+        }
+        (start, end)
+    }
+
+    /// Display width of a virtual line in columns.
+    fn vline_width(&mut self, vline: usize) -> Option<u32> {
+        self.refresh_cache();
+        let line = self.cached_lines.get(vline).copied()?;
+        let text = self.buffer.content();
+        let mut acc = 0u32;
+        for s in self.cluster_starts(line.start, line.end) {
+            acc += width_at(text, s, 8, WidthMethod::Unicode).max(1);
+        }
+        Some(acc)
+    }
+
+    fn unit_at(
+        &mut self,
+        vline: usize,
+        col: u32,
+        behavior: GestureBehavior,
+    ) -> Result<(usize, usize), TextError> {
+        let offset = self
+            .cell_to_offset(vline, col)
+            .ok_or(TextError::LineOutOfRange)?;
+        let (line, _) = self.offset_to_line_col(offset)?;
+        let (line_start, line_end) = self.check_line(line)?;
+        // Padding clicks (past the last cell) select nothing: a
+        // zero-width range at the line end, except line behavior
+        // which still takes the line.
+        let padding = self.vline_width(vline).is_some_and(|w| col >= w);
+        let unit = match behavior {
+            GestureBehavior::Cell => (offset, offset),
+            GestureBehavior::Word if padding => (line_end, line_end),
+            GestureBehavior::Word => self.word_unit_at(offset, line_start, line_end),
+            GestureBehavior::Line => (line_start, line_end),
+        };
+        Ok(self.apply_occupancy(unit.0, unit.1))
+    }
+
+    fn apply_occupancy(&self, start: usize, end: usize) -> (usize, usize) {
+        let (lo, hi) = (start.min(end), start.max(end));
+        if self.occupancy == SelectionOccupancy::Cell && hi > lo {
+            // Block occupancy includes the grapheme under the max
+            // endpoint: snap the end to the next cluster boundary.
+            let text = self.buffer.content();
+            let (line, _) = self.offset_to_line_col(hi).unwrap_or((0, 0));
+            if let Ok((line_start, line_end)) = self.check_line(line) {
+                for s in self.cluster_starts(line_start, line_end) {
+                    if s > hi {
+                        return (lo, s);
+                    }
+                }
+                return (lo, text.len().min(line_end.max(hi)));
+            }
+        }
+        (lo, hi)
+    }
+
+    /// Press: select the unit under a cell and open a gesture.
+    pub fn gesture_press(
+        &mut self,
+        vline: usize,
+        col: u32,
+        behavior: GestureBehavior,
+    ) -> Result<(), TextError> {
+        let unit = self.unit_at(vline, col, behavior)?;
+        self.selection = Some(unit);
+        self.gesture = Some(GestureState {
+            anchor_unit: unit,
+            behavior,
+        });
+        Ok(())
+    }
+
+    /// Drag: extend the press unit through the focus unit. Forward
+    /// and backward drags over the same cells agree, since both
+    /// endpoints expand to unit edges before the union.
+    pub fn gesture_move(&mut self, vline: usize, col: u32) -> Result<(), TextError> {
+        let anchor_unit = self.gesture.as_ref().map(|g| g.anchor_unit);
+        let behavior = self.gesture.as_ref().map(|g| g.behavior);
+        let (anchor_unit, behavior) = match (anchor_unit, behavior) {
+            (Some(unit), Some(behavior)) => (unit, behavior),
+            _ => return Err(TextError::OutOfRange),
+        };
+        let focus_unit = self.unit_at(vline, col, behavior)?;
+        let united = (
+            anchor_unit.0.min(focus_unit.0),
+            anchor_unit.1.max(focus_unit.1),
+        );
+        self.selection = Some(self.apply_occupancy(united.0, united.1));
+        Ok(())
+    }
+
+    /// Release: commit the drag and close the gesture, returning the
+    /// ordered range. Without an open gesture, reports the current
+    /// selection unchanged.
+    pub fn gesture_release(&mut self) -> Option<(usize, usize)> {
+        self.gesture = None;
+        self.selection()
+    }
+
+    pub fn gesture_active(&self) -> bool {
+        self.gesture.is_some()
+    }
+
+    /// Re-express the current selection with cell occupancy so a
+    /// word or line range keeps its text under block semantics.
+    pub fn gesture_convert_to_cell(&mut self) {
+        if let Some((start, end)) = self.selection() {
+            self.occupancy = SelectionOccupancy::Cell;
+            self.selection = Some(self.apply_occupancy(start, end));
+        }
+    }
+
+    /// Resolve a viewport cell to a content offset. The row counts
+    /// virtual lines below `viewport.first_row`; in wrapping modes
+    /// the horizontal offset is ignored, otherwise the column adds
+    /// `viewport.left_col`. Out-of-window rows are `None`.
+    pub fn viewport_to_offset(
+        &mut self,
+        viewport: Viewport,
+        row: usize,
+        col: u32,
+    ) -> Option<usize> {
+        let wrapping = self.wrap != WrapMode::None;
+        let effective = if wrapping {
+            col
+        } else {
+            col.saturating_add(viewport.left_col)
+        };
+        self.cell_to_offset(viewport.first_row.saturating_add(row), effective)
+    }
+
+    /// Select across viewport coordinates with boundary occupancy.
+    pub fn select_viewport(
+        &mut self,
+        viewport: Viewport,
+        anchor_row: usize,
+        anchor_col: u32,
+        focus_row: usize,
+        focus_col: u32,
+    ) -> Result<(), TextError> {
+        let anchor = self
+            .viewport_to_offset(viewport, anchor_row, anchor_col)
+            .ok_or(TextError::LineOutOfRange)?;
+        let focus = self
+            .viewport_to_offset(viewport, focus_row, focus_col)
+            .ok_or(TextError::LineOutOfRange)?;
+        self.selection = Some((anchor.min(focus), anchor.max(focus)));
         Ok(())
     }
 
@@ -1247,4 +1560,324 @@ fn view_dirty_tracking() {
     assert!(!buf.view_dirty(first));
     assert!(!buf.view_dirty(ViewId(999)));
     buf.clear_view_dirty(ViewId(999));
+}
+
+// ---- selection types and editor view (TXT-011, TXT-012, TXT-015) ----
+
+/// How a pressed cell expands into a range. Mirrors the reference
+/// `SelectionBehavior`: `cell` keeps the inclusive press/drag,
+/// `word` and `line` expand each endpoint.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GestureBehavior {
+    Cell,
+    Word,
+    Line,
+}
+
+/// How a selection occupies cells between its offsets. `Cell`
+/// includes the grapheme under the max endpoint (block semantics);
+/// `Boundary` is the half-open range `[min, max)`. Mirrors the
+/// reference `SelectionOccupancy`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SelectionOccupancy {
+    Cell,
+    Boundary,
+}
+
+/// Rectangular window into virtual-line space: rows below
+/// `first_row`, display columns from `left_col`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Viewport {
+    pub first_row: usize,
+    pub left_col: u32,
+}
+
+impl Viewport {
+    pub fn new(first_row: usize, left_col: u32) -> Self {
+        Viewport {
+            first_row,
+            left_col,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct GestureState {
+    anchor_unit: (usize, usize),
+    behavior: GestureBehavior,
+}
+
+/// Reference word-selection separators: these group into selectable
+/// runs instead of splitting words. `/` is deliberately absent
+/// (unlike in wrapping), and CJK groups with ASCII.
+fn is_selection_separator(ch: char) -> bool {
+    matches!(
+        ch,
+        ' ' | '\t'
+            | '\''
+            | '"'
+            | '│'
+            | '`'
+            | '|'
+            | ':'
+            | ';'
+            | ','
+            | '('
+            | ')'
+            | '['
+            | ']'
+            | '{'
+            | '}'
+            | '<'
+            | '>'
+            | '$'
+    )
+}
+
+/// Editor view owning viewport, cursor visibility, and cell-space
+/// selection as one unit over a `TextView` (TXT-015). Colors stay
+/// with the view highlight layer; this unit owns geometry and
+/// behavior only.
+pub struct EditorView {
+    view: TextView,
+    viewport_rows: u32,
+    viewport_cols: u32,
+    first_row: usize,
+    left_col: u32,
+    follow_cursor: bool,
+    anchor_cell: Option<(usize, u32)>,
+    anchor_behavior: GestureBehavior,
+}
+
+impl EditorView {
+    pub fn new(buffer: TextBuffer) -> Self {
+        EditorView {
+            view: TextView::new(buffer),
+            viewport_rows: 24,
+            viewport_cols: 80,
+            first_row: 0,
+            left_col: 0,
+            follow_cursor: false,
+            anchor_cell: None,
+            anchor_behavior: GestureBehavior::Cell,
+        }
+    }
+
+    pub fn text_view(&self) -> &TextView {
+        &self.view
+    }
+
+    pub fn text_view_mut(&mut self) -> &mut TextView {
+        &mut self.view
+    }
+
+    /// Size the window and the layout width together.
+    pub fn set_viewport_size(&mut self, cols: u32, rows: u32) {
+        self.viewport_cols = cols.max(1);
+        self.viewport_rows = rows.max(1);
+        self.view.set_width(cols);
+    }
+
+    pub fn viewport_size(&self) -> (u32, u32) {
+        (self.viewport_cols, self.viewport_rows)
+    }
+
+    pub fn scroll_to(&mut self, first_row: usize, left_col: u32) {
+        self.first_row = first_row;
+        self.left_col = left_col;
+    }
+
+    pub fn viewport(&self) -> Viewport {
+        Viewport::new(self.first_row, self.left_col)
+    }
+
+    pub fn set_selection_follow_cursor(&mut self, enabled: bool) {
+        self.follow_cursor = enabled;
+    }
+
+    /// Scroll the window just enough to show the cursor's virtual
+    /// line, keeping `margin_rows` of context where room allows.
+    pub fn ensure_cursor_visible(&mut self, margin_rows: u32) {
+        let cursor = self.view.cursor();
+        let lines = self.view.virtual_lines().to_vec();
+        let mut cursor_row = 0;
+        for (index, vline) in lines.iter().enumerate() {
+            if vline.start <= cursor {
+                cursor_row = index;
+            } else {
+                break;
+            }
+        }
+        let rows = self.viewport_rows as usize;
+        let margin = margin_rows as usize;
+        if cursor_row < self.first_row {
+            self.first_row = cursor_row.saturating_sub(margin);
+        } else if cursor_row >= self.first_row + rows {
+            self.first_row = (cursor_row + 1 + margin).saturating_sub(rows);
+        }
+        // Horizontal: reveal the cursor's display column.
+        let vline = lines.get(cursor_row);
+        if let Some(vline) = vline {
+            let text = self.view.buffer().content();
+            let mut col = 0u32;
+            for s in self.view.cluster_starts(vline.start, vline.end) {
+                if s >= cursor {
+                    break;
+                }
+                col += width_at(text, s, 8, WidthMethod::Unicode).max(1);
+            }
+            let cols = self.viewport_cols;
+            if col < self.left_col {
+                self.left_col = col;
+            } else if col >= self.left_col + cols {
+                self.left_col = col + 1 - cols;
+            }
+        }
+    }
+
+    /// Cursor's visual position: virtual-line index plus display
+    /// column.
+    pub fn visual_cursor(&mut self) -> (usize, u32) {
+        let cursor = self.view.cursor();
+        let lines = self.view.virtual_lines().to_vec();
+        let mut row = 0;
+        for (index, vline) in lines.iter().enumerate() {
+            if vline.start <= cursor {
+                row = index;
+            } else {
+                break;
+            }
+        }
+        let text = self.view.buffer().content();
+        let mut col = 0u32;
+        if let Some(vline) = lines.get(row) {
+            for s in self.view.cluster_starts(vline.start, vline.end) {
+                if s >= cursor {
+                    break;
+                }
+                col += width_at(text, s, 8, WidthMethod::Unicode).max(1);
+            }
+        }
+        (row, col)
+    }
+
+    /// Visual cell back to a content offset.
+    pub fn visual_to_offset(&mut self, vline: usize, col: u32) -> Option<usize> {
+        self.view.cell_to_offset(vline, col)
+    }
+
+    /// Set a cell-space selection with a behavior; with cursor
+    /// follow, the cursor syncs to the focus.
+    pub fn set_local_selection(
+        &mut self,
+        anchor_row: usize,
+        anchor_col: u32,
+        focus_row: usize,
+        focus_col: u32,
+        behavior: GestureBehavior,
+    ) -> Result<(), TextError> {
+        self.view.gesture_press(anchor_row, anchor_col, behavior)?;
+        self.view.gesture_move(focus_row, focus_col)?;
+        self.anchor_cell = Some((anchor_row, anchor_col));
+        self.anchor_behavior = behavior;
+        if self.follow_cursor {
+            self.sync_cursor_to_focus();
+        }
+        Ok(())
+    }
+
+    /// Move the focus of the stored anchor selection.
+    pub fn update_local_selection(
+        &mut self,
+        focus_row: usize,
+        focus_col: u32,
+    ) -> Result<(), TextError> {
+        let (anchor_row, anchor_col) = self.anchor_cell.ok_or(TextError::OutOfRange)?;
+        self.view
+            .gesture_press(anchor_row, anchor_col, self.anchor_behavior)?;
+        self.view.gesture_move(focus_row, focus_col)?;
+        if self.follow_cursor {
+            self.sync_cursor_to_focus();
+        }
+        Ok(())
+    }
+
+    pub fn reset_local_selection(&mut self) {
+        self.view.clear_selection();
+        self.view.gesture_release();
+        self.anchor_cell = None;
+    }
+
+    pub fn convert_selection_to_cell(&mut self) {
+        self.view.gesture_convert_to_cell();
+    }
+
+    pub fn set_selection_occupancy(&mut self, occupancy: SelectionOccupancy) {
+        self.view.set_gesture_occupancy(occupancy);
+    }
+
+    fn sync_cursor_to_focus(&mut self) {
+        if let Some((_, end)) = self.view.selection() {
+            let _ = self.view.set_cursor(end);
+        }
+    }
+}
+
+// ---- text-gaps unit tests (the runner also drives tests/text_gaps.rs) ----
+
+#[cfg(test)]
+mod gap_tests {
+    use super::*;
+
+    #[test]
+    fn gesture_selection_word_unit() {
+        let mut view = TextView::new(TextBuffer::from_text("alpha beta"));
+        view.gesture_press(0, 7, GestureBehavior::Word).unwrap();
+        assert_eq!(Some((6, 10)), view.gesture_release());
+    }
+
+    #[test]
+    fn viewport_selection_offsets() {
+        let mut view = TextView::new(TextBuffer::from_text("aaa\nbbb\nccc"));
+        let viewport = Viewport::new(1, 0);
+        view.select_viewport(viewport, 0, 0, 1, 3).unwrap();
+        assert_eq!(Some("bbb\nccc"), view.selected_text());
+    }
+
+    #[test]
+    fn iterators_round_trip() {
+        let buf = TextBuffer::from_text("ab\ncd");
+        let (row, col) = buf.offset_to_coords(4).unwrap();
+        assert_eq!((1, 1), (row, col));
+        assert_eq!(4, buf.coords_to_offset(row, col).unwrap());
+        let texts: Vec<&str> = buf.clusters(0, 2).unwrap().iter().map(|c| c.text).collect();
+        assert_eq!(vec!["a", "b"], texts);
+    }
+
+    #[test]
+    fn wrap_cache_counts() {
+        let mut view = TextView::new(TextBuffer::from_text("aaa bbb"));
+        view.set_wrap_mode(WrapMode::Word);
+        view.set_width(4);
+        view.virtual_lines();
+        assert_eq!(1, view.recompute_count());
+        view.virtual_lines();
+        assert_eq!(1, view.recompute_count());
+    }
+
+    #[test]
+    fn editor_view_cursor_visible() {
+        let text = (0..40)
+            .map(|i| format!("line{i:02}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut editor = EditorView::new(TextBuffer::from_text(&text));
+        editor.set_viewport_size(80, 10);
+        editor.text_view_mut().set_cursor(200).unwrap();
+        editor.ensure_cursor_visible(1);
+        let (row, _) = editor.visual_cursor();
+        let viewport = editor.viewport();
+        assert!(row >= viewport.first_row);
+        assert!(row < viewport.first_row + 10);
+    }
 }
