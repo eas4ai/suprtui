@@ -1,0 +1,21 @@
+requirement: SYS-003
+requirement_digest: sha256:416b677325de24534ebe30294cda2319df721655da0632bfa96ae7baef1dce0a
+sequence: 1
+history_digest: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+mechanism: sys-clipboard.md
+commit: fbc53bb
+inputs_digest: sha256:69635b83d56ac630b6ad4c6d7a7e7f0783157acc42adb43dbd03482dd82958ec
+mechanism_digest: sha256:8115c4758616ad7936c27237b9e8246372c1cdcea139ca42eea45e85d2c908b5
+inputs_detail: .cairn/evidence/SYS-003/20260907T194649464Z-2220104.inputs.json
+command: sh scripts/sys-clipboard.sh
+cwd: .
+exit: 0
+output_digest: sha256:0951b3f212d06561830a5b51378d8c1a92f4a83cef012d71fdae6bb67b7cde89
+output: .cairn/evidence/SYS-003/20260907T194649464Z-2220104.out
+stderr_output: .cairn/evidence/SYS-003/20260907T194649464Z-2220104.err
+stderr_digest: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+signal: none
+execution_error: null
+result: pass
+source: line
+recorded: 2026-09-07T19:46:49.622Z
