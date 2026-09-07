@@ -1,0 +1,21 @@
+requirement: UNI-008
+requirement_digest: sha256:c5b2a5872fad2de1ad62eca26a7dc58631ef3d0191df262d96b5a78b8ca72132
+sequence: 1
+history_digest: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+mechanism: uni-pool.md
+commit: e2a8c2f
+inputs_digest: sha256:985e3ae5030afe8e72a5fc90df46d77144eb7f66ced76b9e16ff398cf59fb19a
+mechanism_digest: sha256:af8bb479f6f740925ac87bf92a704c50bf63dae7257abf561dae0acc64b61c28
+inputs_detail: .cairn/evidence/UNI-008/20260907T142217416Z-2335752.inputs.json
+command: sh scripts/uni-pool.sh
+cwd: .
+exit: 0
+output_digest: sha256:dc382e74d149071d6724071c0840eeddc86e177ebb025a22aeeec3729005cb64
+output: .cairn/evidence/UNI-008/20260907T142217416Z-2335752.out
+stderr_output: .cairn/evidence/UNI-008/20260907T142217416Z-2335752.err
+stderr_digest: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+signal: none
+execution_error: null
+result: pass
+source: line
+recorded: 2026-09-07T14:22:17.466Z
