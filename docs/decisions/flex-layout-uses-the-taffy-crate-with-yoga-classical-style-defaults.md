@@ -11,4 +11,4 @@ LAY-001 is engine-neutral: fixtures observe sizes and positions, which any confo
 
 ## Realized by
 
-(none yet: recorded, not built)
+- 4bdb272  Implement layout-engine LAY-001..004 with taffy and ported fixtures
