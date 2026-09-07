@@ -287,9 +287,8 @@ fn req_003_link_per_cell_counting() {
     set_text(&mut buf, "X", 0, 0, fg, bg, 0);
     assert_eq!(Some(2), buf.link_tracker.cell_count(link_id));
     assert_eq!(1, link_pool.borrow().get_refcount(link_id).unwrap());
-
-    buf.clear(bg, None);
-    assert_eq!(0, buf.link_tracker.link_count());
+    // Release-on-clear is BUF-007's assertion (buffer::clear covers it);
+    // this test owns counting only, so it must not depend on clear().
 }
 
 #[test]
