@@ -50,5 +50,11 @@ spec-literal unit tests plus the ported suites, and clippy is clean.
 
 ## Mechanism demonstration (SPEC-022)
 
-To be demonstrated with controlled faults, one per requirement, each
-a source edit reverted in the same session, not a setup error.
+Demonstrated 2026-09-07 with controlled faults, each a source edit
+reverted in the same session, not a setup error: a defaulted kitty
+flag fails exactly TRM-001, an SGR `?1006h` → `?1007h` byte fails
+exactly TRM-002/TRM-005, an alt-exit `?1049l` → `?1048l` byte fails
+exactly TRM-003, kitty flags `0b00101` → `0b00100` fail exactly
+TRM-004, a dropped tmux wcwidth rule fails exactly TRM-008, a tmux
+DCS envelope byte fails exactly TRM-009, and a kitty-before-sixel
+swap fails exactly TRM-010.

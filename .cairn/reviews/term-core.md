@@ -1,0 +1,8 @@
+# Review: term-core
+
+commit: 3365709313c78c0a467e92d553278e7dd711057e
+findings:
+  - closed: capability defaults with query-response detection (kitty `CSI ? N u`, tmux/alacritty identity, OSC 52 and hyperlink term lists, XTGETTCAP Ms proof), idempotent mode setters with byte-exact order, unconditional restore with kitty pop-then-push, balanced shutdown, pure environment inference, OSC 52 budget math with three passthroughs, and image-protocol resolution land with 12 integration vectors; full suite green (534 tests), clippy zero warnings, fmt clean, no `unsafe`
+  - closed: two test expectations corrected against the reference instead of the code: `TermModes.mouse_movement` is sticky across disable (terminal.zig never clears it) and foot-in-multiplexer clears response-proven hyperlinks before the xtversion identity re-proves them; environment stage now takes response seeds (`osc52`, `hyperlinks`, `unicode`) so the fold order mirrors `checkEnvironmentOverrides`
+  - closed: SPEC-022 faults fail exactly their requirement, all eight (default kitty flag exactly TRM-001, SGR `?1006h` → `?1007h` exactly TRM-002/TRM-005, alt-exit `?1049l` → `?1048l` exactly TRM-003, kitty flags `0b00101` → `0b00100` exactly TRM-004, dropped tmux wcwidth rule exactly TRM-008, tmux DCS envelope byte exactly TRM-009, kitty-before-sixel swap exactly TRM-010); all faults reverted in-session
+  - closed: scope kept clean: an alternate-screen const dedup touching `src/render.rs` was reverted to keep term-core inside its declared paths; `tests/term_core.rs` added to the mechanism inputs to match the sibling pattern

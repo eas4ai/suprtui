@@ -1,0 +1,21 @@
+requirement: TRM-002
+requirement_digest: sha256:d9112d9bb588b0d6eaeaeba250f3e2bf756746b76020a1721b10fb30b7afd602
+sequence: 2
+history_digest: sha256:c36e68bf22c5b8e28ea080f4a7e31c088e3eedd9f497519dc4b7a10f6c4e58e4
+mechanism: term-core.md
+commit: 3365709
+inputs_digest: sha256:900c0b9a73d52e755b670caa82444482128b4a816b56cf76f03df5502bf4cf3c
+mechanism_digest: sha256:89608b1e5df060ef1a6a209e3b79adfc21024bc381322530bbef1288e61fd367
+inputs_detail: .cairn/evidence/TRM-001/20260907T180505772Z-858198.inputs.json
+command: sh scripts/term-core.sh
+cwd: .
+exit: 0
+output_digest: sha256:f35711af95f5138dec03644f876dd90145a0d718f93270acc56ae6c804fd2ae6
+output: .cairn/evidence/TRM-001/20260907T180505772Z-858198.out
+stderr_output: .cairn/evidence/TRM-001/20260907T180505772Z-858198.err
+stderr_digest: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+signal: none
+execution_error: null
+result: pass
+source: line
+recorded: 2026-09-07T18:05:06.029Z
