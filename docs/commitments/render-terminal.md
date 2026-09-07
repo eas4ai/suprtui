@@ -45,5 +45,8 @@ spec-literal unit tests plus the ported suites, and clippy is clean.
 
 ## Mechanism demonstration (SPEC-022)
 
-To be demonstrated with controlled faults, one per requirement, each
-a source edit reverted in the same session, not a setup error.
+Demonstrated 2026-09-07 with controlled faults, each a source edit
+reverted in the same session, not a setup error: dropped threaded
+bytes fail exactly REN-006, a kept alternate screen exactly REN-007,
+a staged-grid hit read exactly REN-008, an ignored offset exactly
+REN-009, and cleared fallback cells exactly REN-010.
