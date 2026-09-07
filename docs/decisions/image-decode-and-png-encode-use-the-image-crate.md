@@ -11,4 +11,4 @@ MED-001 needs PNG, JPEG, GIF, and WebP decoding to RGBA with dimensions; MED-002
 
 ## Realized by
 
-(none yet: recorded, not built)
+- 2e3af29  Implement media-image MED-001/002 with image crate and ported fixtures
