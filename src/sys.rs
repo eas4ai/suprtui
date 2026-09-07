@@ -13,10 +13,13 @@ use std::collections::VecDeque;
 // SYS-002: ordered event bus.
 // ---------------------------------------------------------------------------
 
+/// Event delivery callback: name plus payload bytes.
+pub type EventCallback = dyn FnMut(&str, &[u8]);
+
 /// A destroyable event sink. Dropping the callback stops delivery;
 /// the struct itself stays usable (emits become no-ops).
 pub struct EventSink {
-    callback: Option<Box<dyn FnMut(&str, &[u8])>>,
+    callback: Option<Box<EventCallback>>,
 }
 
 impl EventSink {
@@ -61,11 +64,14 @@ pub enum LogLevel {
     Debug = 3,
 }
 
+/// Log delivery callback: level plus message text.
+pub type LogCallback = dyn FnMut(LogLevel, &str);
+
 /// Caller-owned logger. Without a sink every message drops silently
 /// without panicking.
 pub struct Logger {
     level: LogLevel,
-    sink: Option<Box<dyn FnMut(LogLevel, &str)>>,
+    sink: Option<Box<LogCallback>>,
 }
 
 impl Logger {
