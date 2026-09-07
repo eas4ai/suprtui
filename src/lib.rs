@@ -8,6 +8,7 @@ pub mod ansi;
 pub mod buffer;
 pub mod layout;
 pub mod link;
+pub mod media;
 pub mod render;
 pub mod term;
 pub mod term_embedded;
