@@ -1,6 +1,6 @@
 # Review: sys-core
 
-commit: 22387a35b836e400bb4d5bfcfd58b88e88095628
+commit: 974cf01fe08f93251f62f299cd9ce388fb3cf06e
 findings:
   - closed: ordered event bus with destroyable sinks, level-gated caller-owned logging, direct-port split-scrollback accounting, chunked span feed with atomic contiguity and exactly-once drains, link-pool limit/scoping vectors, six ported scrollback vectors, and a malformed-input corpus across public APIs land with 7 vectors; full suite green, sys-owned code clippy-clean with no `unsafe`, no new dependencies
   - closed: SYS-001 src/ review: no process-global registries exist — `grep static src/` finds only a `&'static str` return type; every pool, sink, logger, feed, engine, tree, and terminal is caller-owned; cross-instance independence is asserted per type in req_001
