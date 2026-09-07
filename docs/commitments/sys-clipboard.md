@@ -45,5 +45,9 @@ no display server.
 
 ## Mechanism demonstration (SPEC-022)
 
-To be demonstrated with controlled faults, each a source edit
-reverted in the same session, not a setup error.
+Demonstrated 2026-09-07 with controlled faults, each a source edit
+reverted in the same session, not a setup error: reporting a
+pending backend step as written fails `req_003_no_early_completion`,
+a cancel noop that keeps delivery alive fails
+`req_003_cancel_suppresses_result`, and destroying a pending
+operation fails `req_003_destroy_pending_is_not_ready`.

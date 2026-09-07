@@ -7,6 +7,7 @@
 pub mod ansi;
 pub mod audio;
 pub mod buffer;
+pub mod clipboard;
 pub mod layout;
 pub mod link;
 pub mod media;
