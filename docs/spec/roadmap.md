@@ -2,7 +2,7 @@
 
 Status: Agreed 2026-09-07.
 
-Current: buffer-core
+Current: buffer-draw
 
 Ordered commitments, each a unit of scope named for its goal:
 

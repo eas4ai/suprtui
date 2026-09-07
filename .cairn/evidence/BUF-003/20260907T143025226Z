@@ -1,0 +1,21 @@
+requirement: BUF-003
+requirement_digest: sha256:cd08eef8f53348df4f157e38ce6d8ffa7105687435936cab91014010c20ab0b8
+sequence: 1
+history_digest: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+mechanism: buffer-core.md
+commit: 21d27aa
+inputs_digest: sha256:01cf95f6e8cfbf4f74c106a23f93dd92fe5924622e1f9590e94c7e935f1bb72d
+mechanism_digest: sha256:a5027b4b013757d7eda0d1104559fe1d0382f9018ce9ad3ba8493454e38ed4b4
+inputs_detail: .cairn/evidence/BUF-001/20260907T143024923Z-2415233.inputs.json
+command: sh scripts/buffer-core.sh
+cwd: .
+exit: 0
+output_digest: sha256:bdc0977905f5adcd82a1da82dea6491c5c59510199fd3f5c90f0a27615e7d2e4
+output: .cairn/evidence/BUF-001/20260907T143024923Z-2415233.out
+stderr_output: .cairn/evidence/BUF-001/20260907T143024923Z-2415233.err
+stderr_digest: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+signal: none
+execution_error: null
+result: pass
+source: line
+recorded: 2026-09-07T14:30:25.225Z

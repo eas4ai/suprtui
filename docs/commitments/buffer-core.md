@@ -67,7 +67,10 @@ spec-literal unit tests plus the ported suites, and clippy is clean.
 
 Demonstrated 2026-09-07 with controlled faults, one per requirement:
 intent-bit flip fails exactly BUF-001, palette entry change exactly
-BUF-002, link-bit drop exactly BUF-003, bounds widening exactly
+BUF-002, style-flag reader zeroing exactly BUF-003, bounds widening exactly
 BUF-004, zero-resize accept exactly BUF-005, skipped resize-clear
-exactly BUF-006, skipped tracker-clear exactly BUF-007. Each fault
+exactly BUF-006, skipped placement-clear exactly BUF-007. Two
+coarser faults (link-bit drop, tracker-clear skip) each failed
+BUF-003/BUF-007 jointly, showing where the requirements share
+primitives; the recorded faults are the precise ones. Each fault
 was a source edit, reverted in the same session, not a setup error.
