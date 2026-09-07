@@ -11,6 +11,7 @@ pub mod layout;
 pub mod link;
 pub mod media;
 pub mod render;
+pub mod sys;
 pub mod term;
 pub mod term_embedded;
 pub mod text;
