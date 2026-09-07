@@ -1,0 +1,21 @@
+requirement: TXT-015
+requirement_digest: sha256:918124342634ac2af82370adf3fbfccf3a213ac2bea3d55f411b6bdf09107d24
+sequence: 2
+history_digest: sha256:bb010bdf31bd515d183bfdc68134406181553e94c62e2dcc167513e55950cd19
+mechanism: text-gaps.md
+commit: f5b6c8b
+inputs_digest: sha256:18375ec8e5e83496779c10f7e7d37c32abc51a61e467e6a658a4dad3b9bae333
+mechanism_digest: sha256:fc28d8659342a08f2add8c88d0122731683b30e9f1e4a179af5fa51a5321ccef
+inputs_detail: .cairn/evidence/TXT-011/20260907T202659900Z-2808486.inputs.json
+command: sh scripts/text-gaps.sh
+cwd: .
+exit: 0
+output_digest: sha256:058e5096f96a54bcc19193d216cb685b2f48b62a7da870ec4a3f406668e6f217
+output: .cairn/evidence/TXT-011/20260907T202659900Z-2808486.out
+stderr_output: .cairn/evidence/TXT-011/20260907T202659900Z-2808486.err
+stderr_digest: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+signal: none
+execution_error: null
+result: pass
+source: line
+recorded: 2026-09-07T20:27:00.390Z
