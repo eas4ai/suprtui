@@ -6,6 +6,7 @@
 
 pub mod ansi;
 pub mod buffer;
+pub mod layout;
 pub mod link;
 pub mod render;
 pub mod term;
