@@ -45,5 +45,9 @@ spec-literal unit tests plus the ported suites, and clippy is clean.
 
 ## Mechanism demonstration (SPEC-022)
 
-To be demonstrated with controlled faults, one per requirement, each
-a source edit reverted in the same session, not a setup error.
+Demonstrated 2026-09-07 with controlled faults, each a source edit
+reverted in the same session, not a setup error: width-only word
+wrap fails exactly TXT-005, unordered selection exactly TXT-006,
+char-wise backspace exactly TXT-007, clear-all highlight removal
+exactly TXT-008, mistagged syntax spans exactly TXT-009, and a
+skipped boundary check exactly TXT-010.
