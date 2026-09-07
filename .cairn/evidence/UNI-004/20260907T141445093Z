@@ -1,0 +1,21 @@
+requirement: UNI-004
+requirement_digest: sha256:7739f7c941f7daa2adc846f5b6071c24dc9568f05a8388872f848a59c075f372
+sequence: 1
+history_digest: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+mechanism: uni-segments.md
+commit: 9f6f2ea
+inputs_digest: sha256:9fb9373ee71d25cef2a28988ea2db095c02c4890599057f9357a25d44e0a1b14
+mechanism_digest: sha256:783c21716545b7d6aea1beedd4beb62e17b0fb6f8aec29934e485f925796618b
+inputs_detail: .cairn/evidence/UNI-004/20260907T141444914Z-2252023.inputs.json
+command: sh scripts/uni-segments.sh
+cwd: .
+exit: 0
+output_digest: sha256:5e7d7587c95426739944fbc4c869a290bfe499a030da131a73c7225e3638676c
+output: .cairn/evidence/UNI-004/20260907T141444914Z-2252023.out
+stderr_output: .cairn/evidence/UNI-004/20260907T141444914Z-2252023.err
+stderr_digest: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+signal: none
+execution_error: null
+result: pass
+source: line
+recorded: 2026-09-07T14:14:45.093Z
