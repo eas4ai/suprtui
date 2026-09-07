@@ -2,7 +2,7 @@
 
 Status: Agreed 2026-09-07.
 
-Current: render-terminal
+Current: text-store
 
 Ordered commitments, each a unit of scope named for its goal:
 
