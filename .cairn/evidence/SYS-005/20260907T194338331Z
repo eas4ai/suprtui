@@ -1,0 +1,21 @@
+requirement: SYS-005
+requirement_digest: sha256:0675ada9259822c5b27dbfed3aceb26209ca6f169c3b59bee2cad46bab4ed397
+sequence: 2
+history_digest: sha256:35e915ad9e09f8384cba15b3fdc40f545c1f8f09d2f91b61352ffede25e35826
+mechanism: sys-core.md
+commit: 3560df2
+inputs_digest: sha256:a5e0e070be205dd48d2f3c9628ab9a0064f2af4a9ecb4f32703e1fa26d88fa2f
+mechanism_digest: sha256:df97efa61044adfe46544be9783b212c555e941f431d1460895f8f4235a55dba
+inputs_detail: .cairn/evidence/SYS-001/20260907T194337650Z-2174817.inputs.json
+command: sh scripts/sys-core.sh
+cwd: .
+exit: 0
+output_digest: sha256:c688c17dc7627f18cbb88ebb9fed32cc203c1e19404b8929c38d533c566e37a2
+output: .cairn/evidence/SYS-001/20260907T194337650Z-2174817.out
+stderr_output: .cairn/evidence/SYS-001/20260907T194337650Z-2174817.err
+stderr_digest: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+signal: none
+execution_error: null
+result: pass
+source: line
+recorded: 2026-09-07T19:43:38.330Z
