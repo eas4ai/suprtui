@@ -4,4 +4,7 @@
 //! to one domain: `uni` (UNI), `buffer` (BUF), `render` (REN), `text`
 //! (TXT), `term` (TRM), `layout` (LAY), `media` (MED), `sys` (SYS).
 
+pub mod ansi;
+pub mod buffer;
+pub mod link;
 pub mod uni;
