@@ -5,6 +5,7 @@
 //! (TXT), `term` (TRM), `layout` (LAY), `media` (MED), `sys` (SYS).
 
 pub mod ansi;
+pub mod audio;
 pub mod buffer;
 pub mod layout;
 pub mod link;
