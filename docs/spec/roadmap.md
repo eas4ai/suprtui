@@ -2,7 +2,7 @@
 
 Status: Agreed 2026-09-07.
 
-Current: layout-engine
+Current: media-image
 
 Ordered commitments, each a unit of scope named for its goal:
 

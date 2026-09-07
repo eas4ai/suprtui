@@ -1,0 +1,21 @@
+requirement: LAY-002
+requirement_digest: sha256:cba8398f4c9c1a9b3fd89c5105f81deb86205ccfaece806cd892be0974f61352
+sequence: 3
+history_digest: sha256:00aedddd93a0988af818ed28c904ef4044d97e6799725b12bf446eb4c20ecd34
+mechanism: layout-engine.md
+commit: f5b3302
+inputs_digest: sha256:78c9fcb4f7e992a9f9ea160035794115b88af3047d23553c36e6672b19f7adae
+mechanism_digest: sha256:4e68124a4273e35428eb90ac2dca70c99ae268b0e5d26135b11b5b690cfcb6c0
+inputs_detail: .cairn/evidence/LAY-001/20260907T183108606Z-1136082.inputs.json
+command: sh scripts/layout-engine.sh
+cwd: .
+exit: 0
+output_digest: sha256:8db17cce5a85729d7088702f0f27922b6f27501e5410393655d4c5f120f0ee67
+output: .cairn/evidence/LAY-001/20260907T183108606Z-1136082.out
+stderr_output: .cairn/evidence/LAY-001/20260907T183108606Z-1136082.err
+stderr_digest: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+signal: none
+execution_error: null
+result: pass
+source: line
+recorded: 2026-09-07T18:31:08.769Z

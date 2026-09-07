@@ -44,5 +44,8 @@ clippy is clean.
 
 ## Mechanism demonstration (SPEC-022)
 
-To be demonstrated with controlled faults, one per requirement, each
-a source edit reverted in the same session, not a setup error.
+Demonstrated 2026-09-07 with controlled faults, each a source edit
+reverted in the same session, not a setup error: center
+justification fails exactly LAY-001, the column default fails
+exactly LAY-002, a measure bypass fails exactly LAY-003, and
+dropped ancestor offsets fail exactly LAY-004.
