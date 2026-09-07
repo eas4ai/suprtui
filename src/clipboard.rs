@@ -410,6 +410,422 @@ impl<B: Backend> Service<B> {
 // Lifecycle unit tests (the runner also drives tests/sys_clipboard.rs).
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Platform backends (SYS-009).
+// ---------------------------------------------------------------------------
+
+/// Platform backend selection over helper processes, with routing
+/// ported from the reference `linux.zig` environment detection.
+pub mod platform {
+    use super::{Backend, BackendOutcome, BackendRequest, BackendStep};
+    use std::collections::HashMap;
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+
+    /// What the process environment reports, mirroring the
+    /// reference `Environment`: WSL markers are presence-based,
+    /// display variables must be non-empty.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct Environment {
+        pub is_wsl: bool,
+        pub has_wayland_display: bool,
+        pub has_x11_display: bool,
+    }
+
+    impl Environment {
+        pub fn from_map(vars: &HashMap<String, String>) -> Self {
+            let present = |key: &str| vars.contains_key(key);
+            let non_empty = |key: &str| vars.get(key).is_some_and(|value| !value.is_empty());
+            Self {
+                is_wsl: present("WSL_DISTRO_NAME") || present("WSL_INTEROP"),
+                has_wayland_display: non_empty("WAYLAND_DISPLAY") || non_empty("WAYLAND_SOCKET"),
+                has_x11_display: non_empty("DISPLAY"),
+            }
+        }
+
+        /// Detect from the live process environment plus the kernel
+        /// release, as the reference `detectProcess` does.
+        pub fn detect_process() -> Self {
+            let vars: HashMap<String, String> = std::env::vars().collect();
+            let mut environment = Self::from_map(&vars);
+            if !environment.is_wsl {
+                let release =
+                    std::fs::read_to_string("/proc/sys/kernel/osrelease").unwrap_or_default();
+                environment.is_wsl = is_wsl_kernel_release(release.trim());
+            }
+            environment
+        }
+    }
+
+    /// Case-insensitive `microsoft`/`wsl` match on the kernel
+    /// release, exactly like the reference.
+    pub fn is_wsl_kernel_release(release: &str) -> bool {
+        let lower = release.to_lowercase();
+        lower.contains("microsoft") || lower.contains("wsl")
+    }
+
+    /// Which helper family applies. Mirrors the reference
+    /// `Libraries` selection: Wayland and X11 are attempted in
+    /// preference order wherever their display is present, and the
+    /// WSL flag passes through untouched.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+    pub struct SelectedBackends {
+        pub wayland: bool,
+        pub x11: bool,
+        pub is_wsl: bool,
+    }
+
+    /// Helper family under test or construction.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum HelperSet {
+        Wayland,
+        X11,
+    }
+
+    /// Availability probe: true when the helper family can run.
+    /// Tests count attempts with a fake; production checks the
+    /// helpers on `PATH`.
+    pub fn select_backends(
+        env: Environment,
+        available: &dyn Fn(HelperSet) -> bool,
+    ) -> SelectedBackends {
+        SelectedBackends {
+            wayland: env.has_wayland_display && available(HelperSet::Wayland),
+            x11: env.has_x11_display && available(HelperSet::X11),
+            is_wsl: env.is_wsl,
+        }
+    }
+
+    /// Operating system underfoot.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum OsKind {
+        Linux,
+        MacOs,
+        Windows,
+        Other,
+    }
+
+    impl OsKind {
+        pub fn current() -> Self {
+            match std::env::consts::OS {
+                "linux" => Self::Linux,
+                "macos" => Self::MacOs,
+                "windows" => Self::Windows,
+                _ => Self::Other,
+            }
+        }
+    }
+
+    /// Concrete helper route. WSL without any display falls back to
+    /// the Windows interop helpers; displays always win, as in the
+    /// reference.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum Route {
+        Wayland,
+        X11,
+        WindowsClipboard,
+        MacOsClipboard,
+        Unsupported,
+    }
+
+    /// Pick the route for an environment on an OS.
+    pub fn route(env: Environment, os: OsKind) -> Route {
+        match os {
+            OsKind::MacOs => Route::MacOsClipboard,
+            OsKind::Windows => Route::WindowsClipboard,
+            OsKind::Linux => {
+                if env.has_wayland_display {
+                    Route::Wayland
+                } else if env.has_x11_display {
+                    Route::X11
+                } else if env.is_wsl {
+                    Route::WindowsClipboard
+                } else {
+                    Route::Unsupported
+                }
+            }
+            OsKind::Other => Route::Unsupported,
+        }
+    }
+
+    /// One helper invocation.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct CommandSpec {
+        pub program: String,
+        pub args: Vec<String>,
+    }
+
+    impl CommandSpec {
+        fn new(program: &str, args: &[&str]) -> Self {
+            Self {
+                program: program.to_string(),
+                args: args.iter().map(|arg| arg.to_string()).collect(),
+            }
+        }
+    }
+
+    /// A finished helper invocation.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct CommandOutput {
+        pub status: i32,
+        pub stdout: Vec<u8>,
+    }
+
+    /// Why a helper could not run at all (missing binary, refused
+    /// spawn). A helper that runs and fails maps to `Failed`, never
+    /// here.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub enum RunnerError {
+        SpawnFailed(String),
+    }
+
+    /// Runs helper commands. Production uses [`ProcessRunner`];
+    /// tests script expectations with a fake, so routing and
+    /// command construction run headless.
+    pub trait CommandRunner {
+        fn run(&mut self, spec: &CommandSpec, stdin: &[u8]) -> Result<CommandOutput, RunnerError>;
+    }
+
+    /// Real runner over `std::process`. The only piece that needs a
+    /// live system; everything above it runs against fakes.
+    #[derive(Debug, Default)]
+    pub struct ProcessRunner;
+
+    impl CommandRunner for ProcessRunner {
+        fn run(&mut self, spec: &CommandSpec, stdin: &[u8]) -> Result<CommandOutput, RunnerError> {
+            let mut child = Command::new(&spec.program)
+                .args(&spec.args)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .spawn()
+                .map_err(|err| RunnerError::SpawnFailed(err.to_string()))?;
+            child
+                .stdin
+                .as_mut()
+                .ok_or_else(|| RunnerError::SpawnFailed("no stdin pipe".to_string()))?
+                .write_all(stdin)
+                .map_err(|err| RunnerError::SpawnFailed(err.to_string()))?;
+            let output = child
+                .wait_with_output()
+                .map_err(|err| RunnerError::SpawnFailed(err.to_string()))?;
+            Ok(CommandOutput {
+                status: output.status.code().unwrap_or(-1),
+                stdout: output.stdout,
+            })
+        }
+    }
+
+    /// Clipboard backend over helper processes. Construct with
+    /// [`ProcessBackend::detect`] on a live system or
+    /// [`ProcessBackend::with_route`] in tests.
+    pub struct ProcessBackend<R: CommandRunner> {
+        route: Route,
+        runner: R,
+    }
+
+    impl<R: CommandRunner> ProcessBackend<R> {
+        pub fn with_route(route: Route, runner: R) -> Self {
+            Self { route, runner }
+        }
+
+        /// Detect the route from the live process environment and
+        /// helper availability on `PATH`.
+        pub fn detect(runner: R) -> Self {
+            let env = Environment::detect_process();
+            let selected = select_backends(env, &|set| match set {
+                HelperSet::Wayland => which_helper(&["wl-copy", "wl-paste"]).is_some(),
+                HelperSet::X11 => which_helper(&["xclip", "xsel"]).is_some(),
+            });
+            let routed = route(env, OsKind::current());
+            Self::with_route(resolve_route(routed, env, selected), runner)
+        }
+
+        fn read_command(&self) -> Option<CommandSpec> {
+            match self.route {
+                Route::Wayland => Some(CommandSpec::new("wl-paste", &["--no-newline"])),
+                Route::X11 => Some(CommandSpec::new(
+                    "xclip",
+                    &["-selection", "clipboard", "-out"],
+                )),
+                Route::MacOsClipboard => Some(CommandSpec::new("pbpaste", &[])),
+                Route::WindowsClipboard => Some(CommandSpec::new(
+                    "powershell",
+                    &["-NoProfile", "-Command", "Get-Clipboard -Raw"],
+                )),
+                Route::Unsupported => None,
+            }
+        }
+
+        fn write_commands(&self) -> Vec<CommandSpec> {
+            match self.route {
+                Route::Wayland => vec![CommandSpec::new("wl-copy", &[])],
+                // Prefer xclip, fall back to xsel when it is missing.
+                Route::X11 => vec![
+                    CommandSpec::new("xclip", &["-selection", "clipboard", "-in"]),
+                    CommandSpec::new("xsel", &["--clipboard", "--input"]),
+                ],
+                Route::MacOsClipboard => vec![CommandSpec::new("pbcopy", &[])],
+                Route::WindowsClipboard => vec![CommandSpec::new("clip", &[])],
+                Route::Unsupported => vec![],
+            }
+        }
+
+        fn run_first_success(
+            &mut self,
+            commands: &[CommandSpec],
+            stdin: &[u8],
+        ) -> Result<CommandOutput, RunnerError> {
+            let mut missing: Option<RunnerError> = None;
+            for command in commands {
+                match self.runner.run(command, stdin) {
+                    Ok(output) => return Ok(output),
+                    Err(err) => {
+                        missing = Some(err);
+                    }
+                }
+            }
+            Err(missing.unwrap_or(RunnerError::SpawnFailed("no helper for route".to_string())))
+        }
+    }
+
+    /// Settle a preferred route against helper availability,
+    /// falling back to the other display when it is present and
+    /// available. Mirrors the reference selection outcome, where
+    /// both families are attempted and the available one wins.
+    fn resolve_route(routed: Route, env: Environment, selected: SelectedBackends) -> Route {
+        match routed {
+            Route::Wayland if selected.wayland => Route::Wayland,
+            Route::X11 if selected.x11 => Route::X11,
+            Route::Wayland | Route::X11 => {
+                if env.has_x11_display && selected.x11 {
+                    Route::X11
+                } else if env.has_wayland_display && selected.wayland {
+                    Route::Wayland
+                } else {
+                    Route::Unsupported
+                }
+            }
+            other => other,
+        }
+    }
+
+    fn which_helper(candidates: &[&str]) -> Option<String> {
+        let path = std::env::var_os("PATH")?;
+        for dir in std::env::split_paths(&path) {
+            for candidate in candidates {
+                if dir.join(candidate).is_file() {
+                    return Some(candidate.to_string());
+                }
+            }
+        }
+        None
+    }
+
+    impl<R: CommandRunner> Backend for ProcessBackend<R> {
+        fn step(&mut self, request: &BackendRequest, _polls: u64) -> BackendStep {
+            if request.payload.len() > request.max_bytes {
+                return BackendStep::Complete(BackendOutcome::LimitExceeded);
+            }
+            match request.kind {
+                super::OperationKind::Read => match self.read_command() {
+                    None => BackendStep::Complete(BackendOutcome::Unsupported),
+                    Some(command) => match self.runner.run(&command, &[]) {
+                        Err(_) => BackendStep::Complete(BackendOutcome::Unsupported),
+                        Ok(output) if output.status != 0 => {
+                            BackendStep::Complete(BackendOutcome::Failed)
+                        }
+                        Ok(output) if output.stdout.is_empty() => {
+                            BackendStep::Complete(BackendOutcome::Empty)
+                        }
+                        Ok(output) => BackendStep::Complete(BackendOutcome::Read(output.stdout)),
+                    },
+                },
+                super::OperationKind::Write => {
+                    match self.run_first_success(&self.write_commands(), &request.payload) {
+                        Err(_) => BackendStep::Complete(BackendOutcome::Unsupported),
+                        Ok(output) if output.status != 0 => {
+                            BackendStep::Complete(BackendOutcome::Failed)
+                        }
+                        Ok(_) => BackendStep::Complete(BackendOutcome::Written),
+                    }
+                }
+                super::OperationKind::Clear => {
+                    match self.run_first_success(&self.write_commands(), &[]) {
+                        Err(_) => BackendStep::Complete(BackendOutcome::Unsupported),
+                        Ok(output) if output.status != 0 => {
+                            BackendStep::Complete(BackendOutcome::Failed)
+                        }
+                        Ok(_) => BackendStep::Complete(BackendOutcome::Cleared),
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn wsl_kernel_release_matching() {
+            assert!(is_wsl_kernel_release("4.4.0-19041-Microsoft"));
+            assert!(is_wsl_kernel_release("5.15.153.1-microsoft-standard-WSL2"));
+            assert!(!is_wsl_kernel_release("6.12.31-1-lts"));
+        }
+
+        #[test]
+        fn resolve_falls_back_to_available_display() {
+            let both = Environment {
+                is_wsl: false,
+                has_wayland_display: true,
+                has_x11_display: true,
+            };
+            let x11_only = SelectedBackends {
+                wayland: false,
+                x11: true,
+                is_wsl: false,
+            };
+            assert_eq!(resolve_route(Route::Wayland, both, x11_only), Route::X11);
+            let neither = SelectedBackends {
+                wayland: false,
+                x11: false,
+                is_wsl: false,
+            };
+            assert_eq!(
+                resolve_route(Route::Wayland, both, neither),
+                Route::Unsupported
+            );
+            let wayland_only = SelectedBackends {
+                wayland: true,
+                x11: false,
+                is_wsl: false,
+            };
+            assert_eq!(
+                resolve_route(Route::Wayland, both, wayland_only),
+                Route::Wayland
+            );
+        }
+
+        #[test]
+        fn environment_from_map_rules() {
+            let vars = HashMap::from([
+                ("WAYLAND_DISPLAY".to_string(), String::new()),
+                ("DISPLAY".to_string(), ":0".to_string()),
+                ("WSL_INTEROP".to_string(), String::new()),
+                ("WAYLAND_SOCKET".to_string(), "7".to_string()),
+            ]);
+            let env = Environment::from_map(&vars);
+            assert!(env.is_wsl);
+            assert!(env.has_wayland_display);
+            assert!(env.has_x11_display);
+            let vars = HashMap::from([("WAYLAND_DISPLAY".to_string(), String::new())]);
+            let env = Environment::from_map(&vars);
+            assert!(!env.has_wayland_display);
+        }
+    }
+}
+
 #[cfg(test)]
 mod lifecycle {
     use super::*;

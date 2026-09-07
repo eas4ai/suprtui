@@ -86,6 +86,19 @@ an untyped error.
 Mechanism: `cargo test -p suprtui sys::error_discipline` with a
 malformed-input corpus, plus `cargo clippy -p suprtui`.
 
+[SYS-009]
+Clipboard reads and writes MUST work against real platform clipboards
+through helper processes, routed by environment: Wayland
+(`wl-copy`/`wl-paste`) when `WAYLAND_DISPLAY` is set, X11
+(`xclip`/`xsel`) otherwise on Linux, WSL detected as in the
+reference, `pbcopy`/`pbpaste` on macOS, and `clip` plus PowerShell
+`Get-Clipboard` on Windows. Routing and command construction MUST be
+testable headless behind a command-runner seam with scripted fakes.
+Falsifier: a set `WAYLAND_DISPLAY` routes to X11 helpers, an unknown
+platform reports success, or routing cannot run headless.
+Mechanism: `cargo test -p suprtui clipboard::platform` with scripted
+command fakes.
+
 ## Review
 
 Attacked the draft for contradictions, weak falsifiers, and

@@ -2,7 +2,7 @@
 
 Status: Agreed 2026-09-07.
 
-Current: sys-clipboard
+Current: sys-clipboard-backends
 
 Ordered commitments, each a unit of scope named for its goal:
 
@@ -40,3 +40,5 @@ Ordered commitments, each a unit of scope named for its goal:
     SYS-004 … SYS-008).
 16. `sys-clipboard` — headless-testable clipboard lifecycle and
     platform backends (SYS-003).
+17. `sys-clipboard-backends` — real platform clipboard backends
+    over helper processes with headless-tested routing (SYS-009).
