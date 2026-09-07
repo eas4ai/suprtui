@@ -5,6 +5,7 @@ inputs:
   - scripts/text-store.sh
   - src/lib.rs
   - src/text.rs
+  - tests/text_store.rs
   - Cargo.toml
   - Cargo.lock
 requirements:
