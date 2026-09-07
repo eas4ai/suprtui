@@ -11,4 +11,4 @@ TRM-006 is engine-neutral: fixtures observe composed grids, which any conforming
 
 ## Realized by
 
-727b388 Implement term-embedded TRM-006/007 with vte engine and ported fixtures
+ee5567d Implement term-embedded TRM-006/007 with vte engine and ported fixtures
