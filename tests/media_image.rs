@@ -53,11 +53,9 @@ fn req_001_decode() {
     assert_eq!((image.width, image.height), (1, 1));
     assert_eq!(image.pixels, vec![255, 0, 0, 255]);
 
-    // Reference PNG fixture with alpha.
-    let fixture = include_str!(
-        "../reference/opentui-0.5.11/packages/native/src/tests/fixtures/display-p3-rgba.png.base64"
-    );
-    let image = decode(&decode_base64(fixture.trim())).unwrap();
+    // Reference PNG fixture with alpha, inlined: reference/ is not tracked.
+    let fixture = "iVBORw0KGgoAAAANSUhEUgAAAAMAAAABCAYAAAAb4BS0AAABYGlDQ1BpY2MAACiRdZE/SMNAFMa//pEWW1Chg4NDBxWHFtQW7KCg7VCQIjUqqLgk1zQVkjRcUqSzi6Pg6qI4i47FoY7dBV1Ed3EQBBcp5zsjtoh9x9378XHf4907IJgzmeWGlwHL9rhSzCe3d3aTkRdEEUICc8iqzHVWyuUSBsbHPQIy36VlrcH3/o1YRXcZEIgSZ5nDPeJF4tKB50g+Ik6wmlohPiVOcWqQuCN1zedHyYbPb5L5plIAgmHiUaOPtT5mNW4RJ4gnLbPBfvqRL4nr9tYG5XHaE1BQRB5JaGhgHyY8pCnbAzyz35411MnB6HTQBKf7BmrkTJHagAudcpV0nZaJppz531m61cy8Xz2eB4aehHifAiInQPdYiM8zIbrnQIjefmv3/IfPwFJbCHHT02ZywFgM6LR62mobuF4AhluOytXf3whmMv5cKELyuKT5rL8ChQfg6gKYrgIje1/MKWVoGIVbZwAAABVJREFUCNdjOCGnwahxwqY+paLnPwAb+gUi6tq/7wAAAABJRU5ErkJggg==";
+    let image = decode(&decode_base64(fixture)).unwrap();
     assert_eq!(
         image.pixels.len(),
         image.width as usize * image.height as usize * 4
@@ -85,7 +83,7 @@ fn req_001_decode() {
     );
     let image = decode(&gif).unwrap();
     assert_eq!((image.width, image.height), (2, 2));
-    assert_eq!(image.pixels, vec![255, 0, 0, 255].repeat(4));
+    assert_eq!(image.pixels, [255, 0, 0, 255].repeat(4));
 
     // Lossless and alpha WebP decode to canonical RGBA.
     for (encoded, width, height, pixels) in [
@@ -93,7 +91,7 @@ fn req_001_decode() {
             "UklGRhwAAABXRUJQVlA4TA8AAAAvAkAAAAcQ/Y/+ByKi/wEA",
             3,
             2,
-            vec![255, 0, 0, 255].repeat(6),
+            [255, 0, 0, 255].repeat(6),
         ),
         (
             "UklGRh4AAABXRUJQVlA4TBEAAAAvAUAAEA8Q8x/zH4wViOh/CAA=",
