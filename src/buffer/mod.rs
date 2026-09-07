@@ -21,6 +21,8 @@ use crate::uni::segments::{
 use std::cell::RefCell;
 use std::rc::Rc;
 
+pub mod draw;
+
 pub const DEFAULT_SPACE_CHAR: u32 = 32;
 pub const MAX_UNICODE_CODEPOINT: u32 = 0x10FFFF;
 
@@ -132,6 +134,7 @@ pub struct OptimizedBuffer<'a> {
     pub width_method: WidthMethod,
     id: String,
     scissor_stack: Vec<ClipRect>,
+    opacity_stack: Vec<f32>,
     placements: Vec<ImagePlacement>,
 }
 
@@ -160,6 +163,7 @@ impl<'a> OptimizedBuffer<'a> {
             width_method: options.width_method,
             id: options.id,
             scissor_stack: Vec::new(),
+            opacity_stack: Vec::new(),
             placements: Vec::new(),
         })
     }
