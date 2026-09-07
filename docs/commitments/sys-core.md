@@ -48,5 +48,11 @@ clippy is clean.
 
 ## Mechanism demonstration (SPEC-022)
 
-To be demonstrated with controlled faults, one per requirement, each
-a source edit reverted in the same session, not a setup error.
+Demonstrated 2026-09-07 with controlled faults, each a source edit
+reverted in the same session, not a setup error: a shared callback
+cell fails exactly SYS-001, a destroy noop fails exactly SYS-002, a
+513-byte URL limit fails SYS-004 and SYS-008 together (the corpus
+re-pins the same limit), drain-without-removal fails exactly
+SYS-005, an unclamped offset fails exactly SYS-006, an ignored
+level fails exactly SYS-007, and an unguarded device select fails
+exactly SYS-008.
