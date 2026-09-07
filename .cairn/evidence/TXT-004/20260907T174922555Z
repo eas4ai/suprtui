@@ -1,0 +1,21 @@
+requirement: TXT-004
+requirement_digest: sha256:b8d55107a1c591eb4ccb06ad2bb05c58c0d6eb02aef7dfc85b13b0c2ccff0591
+sequence: 2
+history_digest: sha256:c271612040ca323a9adb0720109dd53cbcb0e925c76fd56843c2b9ae0f1649a4
+mechanism: text-store.md
+commit: 38f9ace
+inputs_digest: sha256:5a180509c00598c8d61899155c0149f5896aee3c141602d81accf1f81a3b5c82
+mechanism_digest: sha256:255116bf09847591f3bb790b8d43e8041d3a5ebdc8d507ecab38e9bf9fdfe75a
+inputs_detail: .cairn/evidence/TXT-001/20260907T174922394Z-686540.inputs.json
+command: sh scripts/text-store.sh
+cwd: .
+exit: 0
+output_digest: sha256:02441f7222107a0b1c4aa0f6105dca1f59f62f2919e3cbbb6428930f59161e85
+output: .cairn/evidence/TXT-001/20260907T174922394Z-686540.out
+stderr_output: .cairn/evidence/TXT-001/20260907T174922394Z-686540.err
+stderr_digest: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+signal: none
+execution_error: null
+result: pass
+source: line
+recorded: 2026-09-07T17:49:22.554Z
