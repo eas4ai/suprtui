@@ -65,12 +65,15 @@ spec-literal unit tests plus the ported suites, and clippy is clean.
 
 ## Mechanism demonstration (SPEC-022)
 
-Demonstrated 2026-09-07 with controlled faults, one per requirement:
-intent-bit flip fails exactly BUF-001, palette entry change exactly
-BUF-002, style-flag reader zeroing exactly BUF-003, bounds widening exactly
-BUF-004, zero-resize accept exactly BUF-005, skipped resize-clear
-exactly BUF-006, skipped placement-clear exactly BUF-007. Two
-coarser faults (link-bit drop, tracker-clear skip) each failed
-BUF-003/BUF-007 jointly, showing where the requirements share
-primitives; the recorded faults are the precise ones. Each fault
-was a source edit, reverted in the same session, not a setup error.
+Demonstrated 2026-09-07 with controlled faults, one per requirement,
+each failing exactly its requirement: intent-bit flip (BUF-001),
+palette entry change (BUF-002), style-flag reader zeroing (BUF-003),
+bounds widening (BUF-004), zero-resize accept (BUF-005), skipped
+resize-clear (BUF-006), skipped placement-clear (BUF-007). The
+link-bit drop and tracker-clear skip first failed BUF-003/BUF-007
+jointly through test coupling (a 003 test asserting on clear, a 007
+test planting links via the 003 writer); after isolating both tests
+(counting owns no clear assertion, clear plants links with raw
+layout shifts per the spec-pinned layout), re-runs show exact
+precision for both as well. Each fault was a source edit, reverted
+in the same session, not a setup error.

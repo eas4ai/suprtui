@@ -699,7 +699,12 @@ fn clear() {
         .unwrap();
     let gid = pool.borrow_mut().alloc("你".as_bytes()).unwrap();
     let start = crate::uni::segments::pack_grapheme_start(gid, 2);
-    let linked = TextAttributes::set_link_id(u32::from(TextAttributes::BOLD), link_id);
+    // Plant the link with raw layout shifts, not the packing helper: this
+    // test isolates clear(), so its setup must not depend on BUF-003's
+    // writer. The layout (link id in bits 8-31) is spec-pinned by BUF-003.
+    let linked = ((link_id & TextAttributes::LINK_ID_PAYLOAD_MASK)
+        << TextAttributes::LINK_ID_SHIFT)
+        | u32::from(TextAttributes::BOLD);
     let fg = rgb_color(1, 2, 3, 255);
     let bg = rgb_color(0, 0, 0, 255);
     buf.set(0, 0, make_cell(start, fg, bg, linked));
