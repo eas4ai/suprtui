@@ -8,3 +8,7 @@ license = "MIT"
 [lib]
 name = "suprtui"
 path = "src/lib.rs"
+
+[dependencies]
+unicode-segmentation = "1.13.3"
+unicode-properties = "0.1.4"
