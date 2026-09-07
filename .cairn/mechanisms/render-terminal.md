@@ -6,6 +6,7 @@ inputs:
   - src/buffer/mod.rs
   - src/lib.rs
   - src/render.rs
+  - tests/render_terminal.rs
   - Cargo.toml
   - Cargo.lock
 requirements:
