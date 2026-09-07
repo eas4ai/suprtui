@@ -7,7 +7,7 @@ use suprtui::uni::{
 fn _imports() {
     let _ = (
         WidthMethod::Unicode,
-        is_ascii_only(""),
+        is_ascii_only(b""),
         width_at("", 0, 4, WidthMethod::Unicode),
     );
 }

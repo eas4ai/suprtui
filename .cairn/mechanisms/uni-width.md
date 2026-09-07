@@ -3,7 +3,7 @@
 command: sh scripts/uni-width.sh
 inputs:
   - scripts/uni-width.sh
-  - src/uni.rs
+  - src/uni/mod.rs
   - src/uni_tables.rs
   - tests/uni_ported.rs
   - tests/width_map_runs.inc

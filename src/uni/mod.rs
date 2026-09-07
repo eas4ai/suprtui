@@ -8,8 +8,10 @@
 //! `unicode-properties` / `unicode-segmentation` crates; the ported
 //! reference vectors in `tests` decide every disagreement.
 
-#[path = "uni_tables.rs"]
+#[path = "../uni_tables.rs"]
 mod tables;
+
+pub mod segments;
 
 use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
 use unicode_segmentation::UnicodeSegmentation;
@@ -94,7 +96,7 @@ pub fn cell_width(cp: u32, _method: WidthMethod) -> u32 {
     codepoint_width(cp).max(0) as u32
 }
 
-fn char_width(byte: u8, cp: u32, tab_width: u8) -> u32 {
+pub(crate) fn char_width(byte: u8, cp: u32, tab_width: u8) -> u32 {
     if byte == b'\t' {
         return tab_width as u32;
     }
@@ -167,8 +169,8 @@ fn is_devanagari_base(cp: u32) -> bool {
 }
 
 /// Reference `GraphemeWidthState`, ported arm for arm.
-struct WidthState {
-    width: u32,
+pub(crate) struct WidthState {
+    pub(crate) width: u32,
     has_width: bool,
     ri_pair: bool,
     vs16: bool,
@@ -177,7 +179,7 @@ struct WidthState {
 }
 
 impl WidthState {
-    fn init(first_cp: u32, first_width: u32, method: WidthMethod) -> WidthState {
+    pub(crate) fn init(first_cp: u32, first_width: u32, method: WidthMethod) -> WidthState {
         WidthState {
             width: first_width,
             has_width: first_width > 0,
@@ -188,7 +190,7 @@ impl WidthState {
         }
     }
 
-    fn add(&mut self, cp: u32, cp_width: u32) {
+    pub(crate) fn add(&mut self, cp: u32, cp_width: u32) {
         if self.method == WidthMethod::Wcwidth {
             let w = codepoint_width(cp);
             if w > 0 {
@@ -237,7 +239,7 @@ const REPLACEMENT: u32 = 0xFFFD;
 /// Byte ranges of render clusters under the method's boundary rules:
 /// standard extended clusters, forced joints around U+FFFD, and
 /// `no_zwj` splits after ZWJ.
-fn cluster_ranges(text: &str, method: WidthMethod) -> Vec<(usize, usize)> {
+pub(crate) fn cluster_ranges(text: &str, method: WidthMethod) -> Vec<(usize, usize)> {
     let mut out = Vec::new();
     for cluster in text.grapheme_indices(true) {
         let (start, s) = cluster;
@@ -263,16 +265,16 @@ fn cluster_ranges(text: &str, method: WidthMethod) -> Vec<(usize, usize)> {
     out
 }
 
-struct Walked {
-    start: usize,
-    len: usize,
-    width: u32,
-    col_start: u32,
-    multibyte: bool,
-    tab: bool,
+pub(crate) struct Walked {
+    pub(crate) start: usize,
+    pub(crate) len: usize,
+    pub(crate) width: u32,
+    pub(crate) col_start: u32,
+    pub(crate) multibyte: bool,
+    pub(crate) tab: bool,
 }
 
-fn walk(text: &str, tab_width: u8, method: WidthMethod) -> (Vec<Walked>, u32) {
+pub(crate) fn walk(text: &str, tab_width: u8, method: WidthMethod) -> (Vec<Walked>, u32) {
     let mut clusters = Vec::new();
     let mut col: u32 = 0;
     for (start, end) in cluster_ranges(text, method) {
@@ -396,9 +398,9 @@ pub fn width_at(text: &str, byte_offset: usize, tab_width: u8, method: WidthMeth
 }
 
 /// Reference `isAsciiOnly`: nonempty printable ASCII only.
-pub fn is_ascii_only(text: &str) -> bool {
-    if text.is_empty() {
+pub fn is_ascii_only(bytes: &[u8]) -> bool {
+    if bytes.is_empty() {
         return false;
     }
-    text.bytes().all(|b| (32..=126).contains(&b))
+    bytes.iter().all(|b| (32..=126).contains(b))
 }
