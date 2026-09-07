@@ -98,6 +98,17 @@ Falsifier: a skipped frame increments the frame counter or the cells
 counter.
 Mechanism: `cargo test -p suprtui render::stats_count`.
 
+[REN-012]
+Committed frame bytes MUST reach real stdout through a `StdoutBackend`
+implementing the `Backend` trait: frame bytes in commit order, direct
+bytes immediately, failed frames dropped, and writer failures reported
+as `Failed`, never panics. The same frame sequence through the memory
+and stdout backends MUST produce identical streams.
+Falsifier: committed bytes never arrive, arrive reordered, or a broken
+pipe panics.
+Mechanism: `cargo test -p suprtui render::stdout_backend` over a
+`Cursor<Vec<u8>>` stand-in plus a failing writer.
+
 ## Review
 
 Attacked the draft for contradictions, weak falsifiers, and

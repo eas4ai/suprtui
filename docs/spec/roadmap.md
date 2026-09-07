@@ -2,7 +2,7 @@
 
 Status: Agreed 2026-09-07.
 
-Current: sys-clipboard-backends
+Current: render-stdout
 
 Ordered commitments, each a unit of scope named for its goal:
 
@@ -42,3 +42,9 @@ Ordered commitments, each a unit of scope named for its goal:
     platform backends (SYS-003).
 17. `sys-clipboard-backends` — real platform clipboard backends
     over helper processes with headless-tested routing (SYS-009).
+18. `render-stdout` — real stdout render backend with
+    memory/stdout stream parity (REN-012).
+19. `text-gaps` — gesture and viewport selection, iterators, wrap
+    cache, editor-view as a unit (TXT-011 … TXT-015).
+20. `sys-small` — multi-listener event emitter and file logger
+    (SYS-010, SYS-011).

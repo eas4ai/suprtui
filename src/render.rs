@@ -159,6 +159,87 @@ impl Backend for MemoryBackend {
     }
 }
 
+/// Backend that commits frames to a writer. Production construction
+/// targets real stdout; tests drive it over `Cursor<Vec<u8>>` or a
+/// failing writer. Semantics mirror the memory backend: frame bytes
+/// arrive in commit order, direct bytes flush immediately, failed
+/// frames drop their partial bytes, empty frames write nothing, and
+/// writer failures report `Failed` without panicking (REN-012).
+pub struct StdoutBackend<W: std::io::Write> {
+    writer: W,
+    current: Vec<u8>,
+    failed: bool,
+    direct_failed: bool,
+}
+
+impl StdoutBackend<std::io::Stdout> {
+    /// Backend over real stdout.
+    pub fn stdout() -> Self {
+        Self::new(std::io::stdout())
+    }
+}
+
+impl<W: std::io::Write> StdoutBackend<W> {
+    pub fn new(writer: W) -> Self {
+        StdoutBackend {
+            writer,
+            current: Vec::new(),
+            failed: false,
+            direct_failed: false,
+        }
+    }
+
+    /// Release the writer with everything committed so far.
+    pub fn into_writer(self) -> W {
+        self.writer
+    }
+}
+
+impl<W: std::io::Write> Backend for StdoutBackend<W> {
+    fn prepare_frame(&mut self) -> WriteStatus {
+        WriteStatus::Ok
+    }
+
+    fn begin_frame(&mut self) {
+        self.current.clear();
+        self.failed = false;
+    }
+
+    fn write_bytes(&mut self, data: &[u8]) {
+        self.current.extend_from_slice(data);
+    }
+
+    fn write_out(&mut self, data: &[u8]) {
+        // `writeOut` is fire-and-forget in the reference; a failure
+        // here sticks and surfaces at the next `end_frame`.
+        if self.writer.write_all(data).is_err() {
+            self.direct_failed = true;
+        }
+    }
+
+    fn fail_frame(&mut self) {
+        self.failed = true;
+    }
+
+    fn end_frame(&mut self) -> WriteStatus {
+        let failed = self.failed || self.direct_failed;
+        self.failed = false;
+        self.direct_failed = false;
+        if failed {
+            self.current.clear();
+            return WriteStatus::Failed;
+        }
+        if self.current.is_empty() {
+            return WriteStatus::Ok;
+        }
+        let bytes = std::mem::take(&mut self.current);
+        match self.writer.write_all(&bytes) {
+            Ok(()) => WriteStatus::Ok,
+            Err(_) => WriteStatus::Failed,
+        }
+    }
+}
+
 enum ThreadMsg<B> {
     Begin,
     Write(Vec<u8>),
@@ -390,6 +471,11 @@ impl<'a, B: Backend> Renderer<'a, B> {
 
     pub fn backend_mut(&mut self) -> &mut B {
         &mut self.backend
+    }
+
+    /// Release the backend with everything committed so far.
+    pub fn into_backend(self) -> B {
+        self.backend
     }
 
     pub fn set_cursor(&mut self, x: u32, y: u32, visible: bool) {
@@ -1347,4 +1433,57 @@ fn image_fallback() {
             .windows(quadrant.len())
             .any(|w| w == quadrant.as_bytes())
     );
+}
+
+/// REN-012: committed bytes arrive in order through a writer.
+#[cfg(test)]
+#[test]
+fn stdout_backend_order() {
+    use std::io::Cursor;
+    let mut backend = StdoutBackend::new(Cursor::new(Vec::new()));
+    backend.begin_frame();
+    backend.write_bytes(b"ab");
+    backend.write_bytes(b"cd");
+    assert_eq!(WriteStatus::Ok, backend.end_frame());
+    backend.write_out(b"direct");
+    assert_eq!(b"abcddirect", backend.into_writer().into_inner().as_slice());
+}
+
+/// REN-012: failed frames drop partial bytes; empty frames write nothing.
+#[cfg(test)]
+#[test]
+fn stdout_backend_fail_and_empty() {
+    use std::io::Cursor;
+    let mut backend = StdoutBackend::new(Cursor::new(Vec::new()));
+    backend.begin_frame();
+    backend.write_bytes(b"partial");
+    backend.fail_frame();
+    assert_eq!(WriteStatus::Failed, backend.end_frame());
+    backend.begin_frame();
+    assert_eq!(WriteStatus::Ok, backend.end_frame());
+    assert!(backend.into_writer().into_inner().is_empty());
+}
+
+/// REN-012: writer failures report `Failed`, never panic.
+#[cfg(test)]
+#[test]
+fn stdout_backend_broken_writer() {
+    use std::io::{self, Write};
+    struct Broken;
+    impl Write for Broken {
+        fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+            Err(io::Error::other("broken pipe"))
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Err(io::Error::other("broken pipe"))
+        }
+    }
+    let mut backend = StdoutBackend::new(Broken);
+    backend.begin_frame();
+    backend.write_bytes(b"lost");
+    assert_eq!(WriteStatus::Failed, backend.end_frame());
+    let mut backend = StdoutBackend::new(Broken);
+    backend.write_out(b"direct");
+    backend.begin_frame();
+    assert_eq!(WriteStatus::Failed, backend.end_frame());
 }
