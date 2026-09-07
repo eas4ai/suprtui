@@ -1,0 +1,21 @@
+requirement: MED-006
+requirement_digest: sha256:713e1ecd1da41c7cdc8747ec007e9dc25c22dd2aefab90879a39c829ee43ea7f
+sequence: 1
+history_digest: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+mechanism: media-audio.md
+commit: 011c05e
+inputs_digest: sha256:bba8d82adc5f986a3d15da9d9fabc22cbef2f24af9e8af024ed96273152f5872
+mechanism_digest: sha256:ef674a76a586a8c214900bd9b2e6a71dddc00689cd390598b63d9b17b141ebb2
+inputs_detail: .cairn/evidence/MED-003/20260907T184035311Z-1275273.inputs.json
+command: sh scripts/media-audio.sh
+cwd: .
+exit: 0
+output_digest: sha256:c224382d2725381487bbd1972275bda124870b3349904b8ef5e56173b41ca07c
+output: .cairn/evidence/MED-003/20260907T184035311Z-1275273.out
+stderr_output: .cairn/evidence/MED-003/20260907T184035311Z-1275273.err
+stderr_digest: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+signal: none
+execution_error: null
+result: pass
+source: line
+recorded: 2026-09-07T18:40:36.076Z

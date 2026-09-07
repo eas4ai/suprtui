@@ -45,5 +45,10 @@ clippy is clean.
 
 ## Mechanism demonstration (SPEC-022)
 
-To be demonstrated with controlled faults, one per requirement, each
-a source edit reverted in the same session, not a setup error.
+Demonstrated 2026-09-07 with controlled faults, each a source edit
+reverted in the same session, not a setup error: a dropped device
+gate fails exactly MED-003, a weakened close gate fails exactly
+MED-004, an off-by-one selection bound fails exactly MED-005, a
+drop-oldest overflow policy fails exactly MED-006, and sound id
+reuse fails exactly MED-007. The first MED-005 probe passed and
+exposed a missing boundary assertion, added before re-probing.
