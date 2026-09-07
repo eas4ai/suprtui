@@ -5,6 +5,8 @@ inputs:
   - scripts/render-core.sh
   - src/buffer/mod.rs
   - src/lib.rs
+  - src/render.rs
+  - tests/render_core.rs
   - Cargo.toml
   - Cargo.lock
 requirements:
