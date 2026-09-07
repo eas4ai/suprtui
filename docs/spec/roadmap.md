@@ -2,7 +2,7 @@
 
 Status: Agreed 2026-09-07.
 
-Current: sys-core
+Current: sys-clipboard
 
 Ordered commitments, each a unit of scope named for its goal:
 
