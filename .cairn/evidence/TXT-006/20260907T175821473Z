@@ -1,0 +1,21 @@
+requirement: TXT-006
+requirement_digest: sha256:8b72d94a49c761b194c9b514f1b92ad8bcbd31a73107bd771b821cfc639143da
+sequence: 1
+history_digest: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+mechanism: text-view.md
+commit: 283d428
+inputs_digest: sha256:8fc2366de3f6cde85543e44a678f6e14511b880bef1af156af5ea98aebe42c5f
+mechanism_digest: sha256:229e768078cb7c88641b1b4e7d24a56ec8c9e78e6c709a8fd2cc66cbde312c24
+inputs_detail: .cairn/evidence/TXT-005/20260907T175821249Z-783909.inputs.json
+command: sh scripts/text-view.sh
+cwd: .
+exit: 0
+output_digest: sha256:dbb7c5d0f5c08c54222f829c0d84ac71c79c4b3bd749be1f41862f51e26a18a4
+output: .cairn/evidence/TXT-005/20260907T175821249Z-783909.out
+stderr_output: .cairn/evidence/TXT-005/20260907T175821249Z-783909.err
+stderr_digest: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+signal: none
+execution_error: null
+result: pass
+source: line
+recorded: 2026-09-07T17:58:21.472Z
