@@ -11,6 +11,7 @@
 #[path = "../uni_tables.rs"]
 mod tables;
 
+pub mod pool;
 pub mod segments;
 
 use unicode_properties::{GeneralCategory, UnicodeGeneralCategory};
@@ -403,4 +404,31 @@ pub fn is_ascii_only(bytes: &[u8]) -> bool {
         return false;
     }
     bytes.iter().all(|b| (32..=126).contains(b))
+}
+
+/// UNI-008 falsifier, spec-literal path `uni::pool_isolation`: two
+/// independently created pools must not observe each other's entries,
+/// and no process-global pool exists to leak through.
+#[cfg(test)]
+#[test]
+fn pool_isolation() {
+    use pool::GraphemePool;
+
+    let mut first = GraphemePool::new();
+    let mut second = GraphemePool::new();
+    let id_first = first.alloc(b"pool-one").unwrap();
+    first.incref(id_first).unwrap();
+    let id_second = second.alloc(b"pool-two").unwrap();
+    second.incref(id_second).unwrap();
+
+    assert_eq!(b"pool-one", first.get(id_first).unwrap());
+    assert_eq!(b"pool-two", second.get(id_second).unwrap());
+    // Same slot layout, same generation: a foreign id must still not
+    // resolve to the other pool's bytes.
+    assert_eq!(id_first, id_second);
+    assert_eq!(b"pool-two", second.get(id_first).unwrap());
+    assert_ne!(b"pool-one", second.get(id_first).unwrap());
+
+    first.decref(id_first).unwrap();
+    second.decref(id_second).unwrap();
 }
