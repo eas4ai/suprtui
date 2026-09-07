@@ -91,6 +91,55 @@ Falsifier: any offset beyond the content end panics or corrupts
 content.
 Mechanism: `cargo test -p suprtui text::offset_bounds`.
 
+[TXT-011]
+Mouse gestures over cells MUST resolve through a press/move/release
+machine with word, line, and cell behaviors: press selects the unit
+under the cell, drag extends it, release commits the range; padding
+clicks produce zero-width ranges; backward drags match forward
+drags; word and line ranges convert to cell ranges without losing
+text.
+Falsifier: a drag backward disagrees with the same drag forward, a
+padding click selects text, or a converted range drops characters.
+Mechanism: `cargo test -p suprtui text::gesture_selection` over
+scripted cell sequences.
+
+[TXT-012]
+Selections anchored in viewport coordinates MUST resolve to the
+same content ranges under scroll offsets: vertical and horizontal
+offsets shift both endpoints, wrapping mode ignores the horizontal
+offset, and empty lines select in full.
+Falsifier: a scrolled selection disagrees with the same selection
+unscrolled, or wrapping honors a horizontal offset.
+Mechanism: `cargo test -p suprtui text::viewport_selection`.
+
+[TXT-013]
+Buffer iteration MUST expose grapheme clusters that never split a
+cluster (zero-width prefixes terminate, never hang), line ranges,
+and offset/coords conversion that round-trips.
+Falsifier: a cluster yields split, iteration hangs, or converting
+there and back lands elsewhere.
+Mechanism: `cargo test -p suprtui text::iterators`.
+
+[TXT-014]
+Laid-out rows MUST come from a cache that recomputes only when
+content, width, or wrap mode moves: repeated queries share one
+layout, and no stale row survives an edit.
+Falsifier: an edit leaves a stale row, or a repeated query
+recomputes.
+Mechanism: `cargo test -p suprtui text::wrap_cache` with a
+recompute counter.
+
+[TXT-015]
+An editor view MUST own viewport, cursor visibility, and cell-space
+selection as one unit: setting the viewport scrolls content under a
+fixed window, the cursor scrolls into view on demand, local
+selections set/update/reset with word/line/cell behaviors, and
+logical positions map to visual ones and back.
+Falsifier: the cursor sits outside the visible window after a
+visibility demand, a local selection disagrees with the same
+offsets set directly, or a logical-visual round trip moves.
+Mechanism: `cargo test -p suprtui text::editor_view`.
+
 ## Review
 
 Attacked the draft for contradictions, weak falsifiers, and

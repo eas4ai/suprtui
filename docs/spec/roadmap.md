@@ -2,7 +2,7 @@
 
 Status: Agreed 2026-09-07.
 
-Current: render-stdout
+Current: text-gaps
 
 Ordered commitments, each a unit of scope named for its goal:
 
