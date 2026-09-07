@@ -1,0 +1,21 @@
+requirement: SYS-010
+requirement_digest: sha256:8d8e1b2b746c0ea99ffd9d87b4511daa712fe0c82d923c8472194055cfd6e6ae
+sequence: 2
+history_digest: sha256:f6ab414a6a46bc288fc5272fded80bafa1e106a3c475b9787ad671b2530d4390
+mechanism: sys-small.md
+commit: 2582733
+inputs_digest: sha256:a1d66680bb71ed25fa9f435df2ba3bb35ca11e9cf5a522a2b811293abbe76b79
+mechanism_digest: sha256:4c985231076f8f8afb2274a3d5c84e7421b6851e4a7fe357f0589e3ad3d0ee6b
+inputs_detail: .cairn/evidence/SYS-010/20260907T202843396Z-2838216.inputs.json
+command: sh scripts/sys-small.sh
+cwd: .
+exit: 0
+output_digest: sha256:dee040955a660c957653212670e6aa66f008948732ab692215eff77929c52b9f
+output: .cairn/evidence/SYS-010/20260907T202843396Z-2838216.out
+stderr_output: .cairn/evidence/SYS-010/20260907T202843396Z-2838216.err
+stderr_digest: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+signal: none
+execution_error: null
+result: pass
+source: line
+recorded: 2026-09-07T20:28:43.636Z
