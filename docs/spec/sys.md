@@ -99,6 +99,23 @@ platform reports success, or routing cannot run headless.
 Mechanism: `cargo test -p suprtui clipboard::platform` with scripted
 command fakes.
 
+[SYS-010]
+Event listeners MUST attach to event types, detach by id, and fire
+in registration order with no listeners tolerated silently; a
+detached listener MUST NOT fire again.
+Falsifier: emission skips a registered listener, fires out of
+order, panics without listeners, or fires a detached listener.
+Mechanism: `cargo test -p suprtui sys::emitter`.
+
+[SYS-011]
+File logging MUST append level-gated lines to a caller-chosen path:
+messages below the level never touch the file, and every call
+above it appends exactly one line without panicking on I/O errors.
+Falsifier: a below-level message appears, a message is lost, or an
+I/O failure panics.
+Mechanism: `cargo test -p suprtui sys::file_logger` over a temp
+file.
+
 ## Review
 
 Attacked the draft for contradictions, weak falsifiers, and

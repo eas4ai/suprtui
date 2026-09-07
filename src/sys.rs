@@ -429,3 +429,179 @@ impl SpanFeed {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// SYS-010: multi-listener event emitter.
+// ---------------------------------------------------------------------------
+
+/// Listener handle returned by [`EventEmitter::on`]. Slot indices
+/// are stable: detaching clears a slot without shifting the rest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ListenerId(u64);
+
+struct ListenerSlot {
+    event: String,
+    callback: Option<Box<dyn FnMut()>>,
+}
+
+/// Multi-listener emitter over string event names, mirroring the
+/// reference `EventEmitter`: listeners attach per event, detach by
+/// id, and fire in registration order. Emitting an event nobody
+/// registered is a silent no-op, never an error.
+#[derive(Default)]
+pub struct EventEmitter {
+    slots: Vec<ListenerSlot>,
+}
+
+impl EventEmitter {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Attach a listener to an event; returns its detach id.
+    pub fn on(&mut self, event: &str, callback: impl FnMut() + 'static) -> ListenerId {
+        self.slots.push(ListenerSlot {
+            event: event.to_string(),
+            callback: Some(Box::new(callback)),
+        });
+        ListenerId(self.slots.len() as u64 - 1)
+    }
+
+    /// Detach a listener. Unknown ids are silent no-ops. Returns
+    /// whether a live listener was removed.
+    pub fn off(&mut self, id: ListenerId) -> bool {
+        match self.slots.get_mut(id.0 as usize) {
+            Some(slot) if slot.callback.is_some() => {
+                slot.callback = None;
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Fire every live listener on an event, in registration order.
+    pub fn emit(&mut self, event: &str) {
+        let mut indices = Vec::new();
+        for (index, slot) in self.slots.iter().enumerate() {
+            if slot.event == event && slot.callback.is_some() {
+                indices.push(index);
+            }
+        }
+        for index in indices {
+            if let Some(callback) = self.slots[index].callback.as_mut() {
+                callback();
+            }
+        }
+    }
+
+    /// Live listener count, for tests.
+    pub fn listener_count(&self) -> usize {
+        self.slots
+            .iter()
+            .filter(|slot| slot.callback.is_some())
+            .count()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SYS-011: file logger.
+// ---------------------------------------------------------------------------
+
+/// What went wrong appending a log line. Returned, never panicked.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FileLogError {
+    Io(String),
+}
+
+/// Logger that appends level-gated lines to a caller-chosen file.
+/// Messages below the level never touch the file; I/O failures
+/// report instead of panicking.
+pub struct FileLogger {
+    level: LogLevel,
+    path: std::path::PathBuf,
+}
+
+impl FileLogger {
+    pub fn new(path: &std::path::Path, level: LogLevel) -> Self {
+        Self {
+            level,
+            path: path.to_path_buf(),
+        }
+    }
+
+    pub fn set_level(&mut self, level: LogLevel) {
+        self.level = level;
+    }
+
+    pub fn level(&self) -> LogLevel {
+        self.level
+    }
+
+    fn append(&self, level: LogLevel, message: &str) -> Result<(), FileLogError> {
+        use std::fmt::Write as _;
+        if level > self.level {
+            return Ok(());
+        }
+        let mut line = String::new();
+        let _ = writeln!(line, "[{level:?}] {message}");
+        std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)
+            .and_then(|mut file| {
+                use std::io::Write as _;
+                file.write_all(line.as_bytes())
+            })
+            .map_err(|err| FileLogError::Io(err.to_string()))
+    }
+
+    pub fn err(&self, message: &str) -> Result<(), FileLogError> {
+        self.append(LogLevel::Err, message)
+    }
+
+    pub fn warn(&self, message: &str) -> Result<(), FileLogError> {
+        self.append(LogLevel::Warn, message)
+    }
+
+    pub fn info(&self, message: &str) -> Result<(), FileLogError> {
+        self.append(LogLevel::Info, message)
+    }
+
+    pub fn debug(&self, message: &str) -> Result<(), FileLogError> {
+        self.append(LogLevel::Debug, message)
+    }
+}
+
+// ---- sys-small unit tests (the runner also drives tests/sys_small.rs) ----
+
+#[cfg(test)]
+mod small_tests {
+    use super::*;
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    #[test]
+    fn emitter_fires_in_order() {
+        let fired = Rc::new(RefCell::new(Vec::new()));
+        let mut emitter = EventEmitter::new();
+        for value in [1, 2, 3] {
+            let fired = Rc::clone(&fired);
+            emitter.on("tick", move || fired.borrow_mut().push(value));
+        }
+        emitter.emit("tick");
+        assert_eq!(*fired.borrow(), vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn file_logger_gates_levels() {
+        let path = std::env::temp_dir().join("suprtui-file-logger-unit.log");
+        let _ = std::fs::remove_file(&path);
+        let logger = FileLogger::new(&path, LogLevel::Warn);
+        logger.info("dropped").unwrap();
+        logger.warn("kept").unwrap();
+        let body = std::fs::read_to_string(&path).unwrap();
+        assert!(!body.contains("dropped"));
+        assert!(body.contains("kept"));
+        let _ = std::fs::remove_file(&path);
+    }
+}
