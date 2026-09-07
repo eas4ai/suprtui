@@ -2,7 +2,7 @@
 
 Status: Agreed 2026-09-07.
 
-Requirements: UNI-001, UNI-002, UNI-003.
+Requirements: UNI-001, UNI-002, UNI-003
 
 ## What it delivers
 
