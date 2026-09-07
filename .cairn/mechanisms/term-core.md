@@ -5,6 +5,7 @@ inputs:
   - scripts/term-core.sh
   - src/lib.rs
   - src/term.rs
+  - tests/term_core.rs
   - Cargo.toml
   - Cargo.lock
 requirements:
