@@ -11,4 +11,4 @@ Width property data comes from UCD 17.0.0 files extracted verbatim (East_Asian_W
 
 ## Realized by
 
-(none yet: recorded, not built)
+- 789cc361675dcb7e2d8ace8f5a1b9e6a79be1137 Implement full uni width tables with ported reference vectors
