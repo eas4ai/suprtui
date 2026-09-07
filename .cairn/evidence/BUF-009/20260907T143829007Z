@@ -1,0 +1,21 @@
+requirement: BUF-009
+requirement_digest: sha256:2efee28d1794f981d5dc095e115b86b4714073b2eb3ebc0108910f2c426b7335
+sequence: 1
+history_digest: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+mechanism: buffer-draw.md
+commit: 903304f
+inputs_digest: sha256:4065dca6d387b8c9579861ca7b6f4ee4e531a118ac92c6369d9e6a5fd1c5db9a
+mechanism_digest: sha256:95ffc070fe9f06bd1724e7f4aded8d27bde64dc7b5a15ef6bcdc4161b14329df
+inputs_detail: .cairn/evidence/BUF-008/20260907T143828797Z-2528428.inputs.json
+command: sh scripts/buffer-draw.sh
+cwd: .
+exit: 0
+output_digest: sha256:c0393ad6689ef9fbb95b9b87d66b35bb7a0c486820c25a7a9cda903ad00a08a4
+output: .cairn/evidence/BUF-008/20260907T143828797Z-2528428.out
+stderr_output: .cairn/evidence/BUF-008/20260907T143828797Z-2528428.err
+stderr_digest: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+signal: none
+execution_error: null
+result: pass
+source: line
+recorded: 2026-09-07T14:38:29.006Z

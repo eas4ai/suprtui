@@ -67,6 +67,8 @@ spec-literal unit tests plus the ported suites, and clippy is clean.
 Demonstrated 2026-09-07 with controlled faults, one per requirement:
 opaque-source change fails exactly BUF-008, scissor-nest removal
 exactly BUF-009, EOL-fill removal exactly BUF-010, style-order swap
-exactly BUF-011, fast-path removal exactly BUF-012, translation
-bypass exactly BUF-013. Each fault was a source edit, reverted in
-the same session, not a setup error.
+exactly BUF-011, first-row fast-path copy exactly BUF-012 (a
+slow-path-only fault passed everything, showing the fast path has
+independent coverage), translation bypass exactly BUF-013. Each
+fault was a source edit, reverted in the same session, not a setup
+error.
