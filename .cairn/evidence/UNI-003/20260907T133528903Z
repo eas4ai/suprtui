@@ -1,0 +1,21 @@
+requirement: UNI-003
+requirement_digest: sha256:09550b436617619d0ef8585f243f4be3e1bcab5c04cd9ad79dd5dde31ddf6526
+sequence: 1
+history_digest: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+mechanism: uni-width.md
+commit: 5a51709
+inputs_digest: sha256:8232b93b24d7f7b2fa6c7c3f69666000484b2e63c613124a25b036bc7ce04d88
+mechanism_digest: sha256:df2019f38e235b612f45a369ae9011b4329b944d50b7b66614dc88e9154cbeba
+inputs_detail: .cairn/evidence/UNI-001/20260907T133528749Z-1863197.inputs.json
+command: sh scripts/uni-width.sh
+cwd: .
+exit: 0
+output_digest: sha256:83273d8097bf1d677f2cd53336cc7950d01622525d3ff55351bb2547a8ac9f21
+output: .cairn/evidence/UNI-001/20260907T133528749Z-1863197.out
+stderr_output: .cairn/evidence/UNI-001/20260907T133528749Z-1863197.err
+stderr_digest: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+signal: none
+execution_error: null
+result: pass
+source: line
+recorded: 2026-09-07T13:35:28.903Z
