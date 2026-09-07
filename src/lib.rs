@@ -9,5 +9,6 @@ pub mod buffer;
 pub mod link;
 pub mod render;
 pub mod term;
+pub mod term_embedded;
 pub mod text;
 pub mod uni;

@@ -4,8 +4,7 @@ command: sh scripts/term-embedded.sh
 inputs:
   - scripts/term-embedded.sh
   - src/lib.rs
-  - src/term/mod.rs
-  - src/term/embedded.rs
+  - src/term_embedded.rs
   - tests/term_embedded.rs
   - Cargo.toml
   - Cargo.lock
