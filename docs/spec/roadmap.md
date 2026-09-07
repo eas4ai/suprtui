@@ -2,7 +2,7 @@
 
 Status: Agreed 2026-09-07.
 
-Current: media-image
+Current: media-audio
 
 Ordered commitments, each a unit of scope named for its goal:
 

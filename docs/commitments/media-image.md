@@ -45,5 +45,7 @@ clippy is clean.
 
 ## Mechanism demonstration (SPEC-022)
 
-To be demonstrated with controlled faults, one per requirement, each
-a source edit reverted in the same session, not a setup error.
+Demonstrated 2026-09-07 with controlled faults, each a source edit
+reverted in the same session, not a setup error: WebP dropped from
+the format gate fails exactly MED-001, and a BMP encoder swap fails
+exactly MED-002.

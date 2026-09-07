@@ -1,0 +1,21 @@
+requirement: MED-002
+requirement_digest: sha256:7ba211274625880801f3b14f5dc47ee84a51bf1b2e6a3218f2aee81b79d583da
+sequence: 1
+history_digest: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+mechanism: media-image.md
+commit: 2e3af29
+inputs_digest: sha256:b76032ad32f109253c47c9a96747422a7c6dedaf70acb8868185e68dc28513ec
+mechanism_digest: sha256:3c5fc86c417fd1d0ceeffcb6162e1d7e3fe59c61db120e3fba24d851a686ba51
+inputs_detail: .cairn/evidence/MED-001/20260907T183408974Z-1179114.inputs.json
+command: sh scripts/media-image.sh
+cwd: .
+exit: 0
+output_digest: sha256:1193439644d27d69e7da26d28005706605929a0ba660025926699b640f06c823
+output: .cairn/evidence/MED-001/20260907T183408974Z-1179114.out
+stderr_output: .cairn/evidence/MED-001/20260907T183408974Z-1179114.err
+stderr_digest: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+signal: none
+execution_error: null
+result: pass
+source: line
+recorded: 2026-09-07T18:34:09.468Z
