@@ -1,0 +1,10 @@
+[package]
+name = "suprtui"
+version = "0.1.0"
+edition = "2024"
+description = "Rust port of the OpenTUI native terminal engine"
+license = "MIT"
+
+[lib]
+name = "suprtui"
+path = "src/lib.rs"
